@@ -17,9 +17,6 @@
  */
 
 
-
-
-
 /* Necessary includes for device drivers */
 #include <linux/init.h>
 #include <linux/module.h>
@@ -42,10 +39,7 @@
 //#include <linux/moduleparam.h>
 #include <linux/timex.h>
 #include <linux/interrupt.h>
-
 #include "aes_test.h"
-#include "file_struct.h"
-
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -87,6 +81,7 @@ module_param(capacity, uint, S_IRUGO);
 /* module_param(algo, charp, S_IRUGO); */
 
 
+/*
 static struct crypto_data {
 	char key[MAX_KEYLEN] __attribute__ ((__aligned__(4)));
 	char iv[MAX_IVLEN];
@@ -94,7 +89,7 @@ static struct crypto_data {
 	unsigned char klen;
 	unsigned short ilen;
 };
-
+*/
 
 /* Global variables of the driver */
 /* Major number */
@@ -263,7 +258,7 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 	char *plain_text;
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
-  /* TODO: Un-pad the stored data
+  /* TODO: Un-pad the stored data */
 
 
 	/* end of buffer reached */
@@ -342,7 +337,7 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
 
-  /* TODO: Pad the input to match the key size
+  /* TODO: Pad the input to match the key size */
 
   printk(KERN_ALERT "Write Called Count=%d\n",count);
 
