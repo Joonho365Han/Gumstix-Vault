@@ -1,0 +1,10 @@
+# Ignore QEMU files
+flash
+root.tar.bz
+rootfs_gumstix.jffs2
+u-boot.bin
+uImage
+
+
+# Ignore the builtin crypto files because they are from the linux source
+builtin_crypto/*
