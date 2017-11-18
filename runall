@@ -1,0 +1,60 @@
+#! /bin/sh
+
+source /ad/eng/courses/ec/ec535/bashrc_ec535
+
+
+# Project Specific stuff
+echo "Building Crypto"
+cd crypto
+make
+cd ..
+
+echo "Copying crypto dir"
+cp crypto/* rootfs/root/crypto/
+
+echo "Coping builtin crypto modules"
+cd builtin_crypto
+cp aes.ko ../rootfs/root/builtin_crypto/
+cp cbc.ko ../rootfs/root/builtin_crypto/
+cp cryptomgr.ko ../rootfs/root/builtin_crypto/
+cp blkcipher.ko ../rootfs/root/builtin_crypto/
+cd ..
+
+
+#remove any previous jffs2 file
+echo "removing old file systems"
+rm -f rootfs_gumstix.jffs2 > /dev/null #do not show "there is no such file" warning
+
+#check the existence of rootfs folder
+if ! [ -d rootfs ] ; then
+    echo "Error: Cannot find rootfs directory."
+    exit
+fi
+
+#create jffs2 file
+echo "bulding rootfs file system"
+mkfs.jffs2 -l -U -e 128KiB -d ./rootfs -D $EC535/gumstix/device_table.txt sumtool -e 128KiB -o rootfs_gumstix.jffs2
+
+#check the existence of u-boot.bin
+if ! [ -f 'u-boot.bin' ] ; then  
+	echo "Error: Cannot find 'u-boot.bin'"
+    exit
+fi
+
+#check the existence of uImage
+if ! [ -f uImage ] ; then  
+	echo "Error: Cannot find uImage"
+    exit
+fi
+
+#remove flash
+rm -f flash > /dev/null #do not show "there is no such file" warning
+
+#create flash
+dd of=flash bs=1k count=16k if=/dev/zero
+dd of=flash bs=1k conv=notrunc if=u-boot.bin
+dd of=flash bs=1k conv=notrunc seek=256 if=rootfs_gumstix.jffs2
+dd of=flash bs=1k conv=notrunc seek=31744 if=uImage
+
+#start qemu
+qemu-system-arm -M verdex -pflash flash -monitor null -nographic -m 289

@@ -1,6 +1,6 @@
 # Ignore QEMU files
 flash
-root.tar.bz
+root.tar.bz2
 rootfs_gumstix.jffs2
 u-boot.bin
 uImage
@@ -8,3 +8,15 @@ uImage
 
 # Ignore the builtin crypto files because they are from the linux source
 builtin_crypto/*
+
+# Ignore files created by make
+crypto/Module.symvers
+crypto/.tmp_versions
+**/*.mod.c
+**/*.mod.o
+**/*.o
+**/*.ko
+**/.*.cmd
+
+# Ignore temporary files
+**/*.swp
