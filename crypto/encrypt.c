@@ -234,11 +234,72 @@ static void encrypt_exit(void)
 
 static int encrypt_open(struct inode *inode, struct file *filp)
 {
+
+  /*
 	unsigned int ret;
-
+  */
   /* TODO: Load IV for file */
-  
 
+  /*
+	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
+
+	if (IS_ERR(tfm)) {
+		printk("failed to load transform for %s: %ld\n", algo,
+		       PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+	desc.tfm = tfm;
+	desc.flags = 0;
+
+	crypto_blkcipher_clear_flags(tfm, ~0);
+  */
+  /*
+	//if (cipher_tv[0].wk)
+	//	crypto_blkcipher_set_flags( tfm, CRYPTO_TFM_REQ_WEAK_KEY);
+	//key = cipher_tv[0].key;
+  */
+
+  /*  TODO: Handle Key. Get it, decrypt it, call setkey */
+  /*
+	ret = crypto_blkcipher_setkey(tfm, key, klen);
+	if (ret) {
+		printk("setkey() failed flags=%x\n", crypto_blkcipher_get_flags(tfm));
+    printk(KERN_ALERT "Open Failed!\n");
+	}
+  */
+ 
+
+	/* Success */
+	return 0;
+}
+
+static int encrypt_release(struct inode *inode, struct file *filp)
+{
+
+  printk("Release Called, writing_data=%d\n", writing_data);
+
+  /* crypto cleanup */
+  //if(tfm) crypto_free_blkcipher(tfm);
+
+  /* Fasync cleanup */
+  if( writing_data ) encrypt_fasync(-1, filp, 0);
+
+	/* Success */
+	return 0;
+}
+
+static ssize_t encrypt_read(struct file *filp, char *buf,
+							size_t count, loff_t *f_pos)
+{
+  int ret;
+  char *local_buf;
+	char *plain_text;
+	struct scatterlist sg[1]; // does this need to be protected? can it be global?
+
+
+  printk("READ CALLED\n");
+  /* TODO: Un-pad the stored data */
+  /* TODO: Load IV for file */
 
 	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
 
@@ -264,66 +325,6 @@ static int encrypt_open(struct inode *inode, struct file *filp)
     printk(KERN_ALERT "Open Failed!\n");
 	}
 
-  /* This stuff does not need to be in open 
-	sg_set_buf(&sg[0], cipher_tv[0].input, cipher_tv[0].ilen);
-
-	iv_len = crypto_blkcipher_ivsize(tfm);
-  
-	if (iv_len)
-		crypto_blkcipher_set_iv(tfm, cipher_tv[0].iv, iv_len);
-
-	len = cipher_tv[0].ilen;
-	ret = enc ?
-		crypto_blkcipher_encrypt(&desc, sg, sg, len) :
-		crypto_blkcipher_decrypt(&desc, sg, sg, len);
-
-	if (ret) {
-		printk("%s () failed flags=%x\n", e, desc.flags);
-		goto out;
-	}
-
-	q = kmap(sg[0].page) + sg[0].offset;
-	hexdump(q, cipher_tv[0].rlen);
-
-	printk("%s\n", memcmp(q, cipher_tv[0].result, cipher_tv[0].rlen) ? "fail" : "pass");
-
-out:
-	crypto_free_blkcipher(tfm);
-
-  */
-	/* Success */
-	return 0;
-}
-
-static int encrypt_release(struct inode *inode, struct file *filp)
-{
-
-  printk("Release Called, writing_data=%d\n", writing_data);
-
-  /* crypto cleanup */
-	crypto_free_blkcipher(tfm);
-
-  if( writing_data )	{
-    encrypt_fasync(-1, filp, 0);
-
-  }
-
-
-	/* Success */
-	return 0;
-}
-
-static ssize_t encrypt_read(struct file *filp, char *buf, 
-							size_t count, loff_t *f_pos)
-{ 
-  int ret;
-  char *local_buf;
-	char *plain_text;
-	struct scatterlist sg[1]; // does this need to be protected? can it be global?
-
-
-  printk("READ CALLED\n");
-  /* TODO: Un-pad the stored data */
 
   writing_data = 0;
 
@@ -364,7 +365,7 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
   /* Decrypt the data */
 	ret = crypto_blkcipher_decrypt(&desc, sg, sg, count);
 
-  
+
 	if (ret) {
 		printk("Decription failed flags=%x\n", desc.flags);
     printk("Failed to decrypt during read!\n");
@@ -379,7 +380,7 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 
 
 
-	/* Transfering data to user space */ 
+	/* Transfering data to user space */
 	if (copy_to_user(buf, plain_text, count))
 	{
 		return -EFAULT;
@@ -388,10 +389,13 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
   /* Overwrite plaintext in temporary buffer */
   memcpy(local_buf, encrypt_buffer + *f_pos, count);
   kfree(local_buf);
-  
-	/* Changing reading position as best suits */ 
-	*f_pos += count; 
-	return count; 
+
+  /* Free Transform */
+  crypto_free_blkcipher(tfm);
+
+	/* Changing reading position as best suits */
+	*f_pos += count;
+	return count;
 }
 
 static ssize_t encrypt_write(struct file *filp, const char *buf,
@@ -404,6 +408,31 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 
 
   /* TODO: Pad the input to match the key size */
+  /* TODO: Load IV for file */
+
+	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
+
+	if (IS_ERR(tfm)) {
+		printk("failed to load transform for %s: %ld\n", algo,
+		       PTR_ERR(tfm));
+		return PTR_ERR(tfm);
+	}
+	desc.tfm = tfm;
+	desc.flags = 0;
+
+	crypto_blkcipher_clear_flags(tfm, ~0);
+  /*
+	if (cipher_tv[0].wk)
+		crypto_blkcipher_set_flags( tfm, CRYPTO_TFM_REQ_WEAK_KEY);
+	key = cipher_tv[0].key;
+  */
+
+  /*  TODO: Handle Key. Get it, decrypt it, call setkey */
+	ret = crypto_blkcipher_setkey(tfm, key, klen);
+	if (ret) {
+		printk("setkey() failed flags=%x\n", crypto_blkcipher_get_flags(tfm));
+    printk(KERN_ALERT "Open Failed!\n");
+	}
 
   printk(KERN_ALERT "Write Called Count=%d\n",count);
   writing_data = 1;
@@ -475,6 +504,10 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
    * and is less sensitive now
    */
   kfree(local_buf);
+
+  /* Free Transform */
+  crypto_free_blkcipher(tfm);
+
 
 	*f_pos += count;
 	encrypt_len = *f_pos;

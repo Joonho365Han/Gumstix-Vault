@@ -10,6 +10,7 @@
 
 void sighandler(int);
 inline void read_encrypt( char* buf, int buf_size);
+inline void read_encrypt_proc( char* file_path);
 
 struct sigaction action, oa;
 
@@ -25,7 +26,8 @@ int main(int argc, char **argv) {
 
 loop_start:
 
-  eFile = open("/dev/encrypt", O_RDONLY);
+  //eFile = open("/dev/encrypt", O_RDONLY);
+  eFile = open("/dev/encrypt", O_RDWR);
   if (eFile < 0) {
 		fprintf (stderr, "encrypt module isn't loaded\n");
 		return;
@@ -41,14 +43,14 @@ loop_start:
 	oflags = fcntl(eFile, F_GETFL);
 	fcntl(eFile, F_SETFL, oflags | FASYNC);
 
-	// Closes.
- 	close(eFile);
-
-
 	// Waits.
   printf("Pausing\n");
 	pause();
   printf("Resuming\n");
+
+	// Closes.
+ 	close(eFile);
+
 
 
   // Re open the file and read the data
@@ -57,7 +59,7 @@ loop_start:
   // Get destination file
   read_encrypt_proc( file_path );
   // Write the buffer to the SD card
-  sdFile = open( file_path, O_RDWR);
+  sdFile = open( file_path, O_RDWR );
   if (sdFile < 0) printf("SDFILE ERROR!");
   write(sdFile, buf, BUF_SIZE);
 	close(sdFile);
@@ -87,7 +89,7 @@ inline void read_encrypt_proc( char* file_path) {
   FILE *eFile;
 
   eFile = fopen("/proc/encrypt", "r");
-  fscanf(eFile, "%s", file_path);
+  fscanf(eFile, "%*s %s", file_path);
 	close(eFile);
 
 }
