@@ -66,15 +66,6 @@ static int proc_write( struct file *filp, const char __user *buff,
 
 /* Structure that declares the usual file */
 /* access functions */
-/*
-struct file_operations encrypt_fops = {
-	read: encrypt_read,
-	write: encrypt_write,
-	open: encrypt_open,
-  fasync: encrypt_fasync,
-	release: encrypt_release,
-};
-*/
 static struct file_operations encrypt_fops = {
 	.read = encrypt_read,
 	.write = encrypt_write,
@@ -82,6 +73,7 @@ static struct file_operations encrypt_fops = {
   .fasync = encrypt_fasync,
 	.release = encrypt_release,
 };
+
 /* Declaration of the init and exit functions */
 module_init(encrypt_init);
 module_exit(encrypt_exit);
@@ -153,12 +145,17 @@ static unsigned long proc_len;
 int writing_data;
 struct fasync_struct *async_queue; /* asynchronous readers */
 
+/*******************************************************************************
+ * Functions
+ ******************************************************************************/
+
 static int encrypt_init(void)
 {
 	int result;
 
 	/* Registering device */
 	result = register_chrdev(encrypt_major, "/dev/encrypt", &encrypt_fops);
+
 	if (result < 0)
 	{
 		printk(KERN_ALERT
@@ -168,12 +165,14 @@ static int encrypt_init(void)
 
 	/* Allocating memory for the buffer */
 	encrypt_buffer = kmalloc(capacity, GFP_KERNEL);
+
 	if (!encrypt_buffer)
 	{
 		printk(KERN_ALERT "Insufficient kernel memory\n"); 
 		result = -ENOMEM;
 		goto fail;
 	}
+
 	memset(encrypt_buffer, 0, capacity);
 	encrypt_len = 0;
 
@@ -191,24 +190,27 @@ static int encrypt_init(void)
   proc_entry->owner = THIS_MODULE;
 
 	proc_buffer= kmalloc( MAX_PROC_LEN, GFP_KERNEL);
+
 	if (!proc_buffer)
 	{
 		printk(KERN_ALERT "Encrypt: Insufficient kernel memory for proc_buffer\n"); 
 		result = -ENOMEM;
 		goto fail;
 	}
+
 	memset(proc_buffer, 0, MAX_PROC_LEN);
 
   /* TODO: Load encrypted key */
   /* Use One password for entire drive */
 
+  /* Misc initializations */
   writing_data = 0;
 
-	printk(KERN_ALERT "Inserting encrypt module\n"); 
+	printk(KERN_ALERT "Inserting encrypt module\n");
 	return 0;
 
 fail:
-	encrypt_exit(); 
+	encrypt_exit();
 	return result;
 }
 
@@ -218,15 +220,8 @@ static void encrypt_exit(void)
 	unregister_chrdev(encrypt_major, "encrypt");
 
 	/* Freeing buffer memory */
-	if (encrypt_buffer)
-	{
-		kfree(encrypt_buffer);
-	}
-	if (proc_buffer)
-	{
-		kfree(proc_buffer);
-	}
-
+	if (encrypt_buffer) kfree(encrypt_buffer);
+	if (proc_buffer) kfree(proc_buffer);
 
 	printk(KERN_ALERT "Removing encrypt module\n");
 
@@ -234,52 +229,13 @@ static void encrypt_exit(void)
 
 static int encrypt_open(struct inode *inode, struct file *filp)
 {
-
-  /*
-	unsigned int ret;
-  */
-  /* TODO: Load IV for file */
-
-  /*
-	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
-
-	if (IS_ERR(tfm)) {
-		printk("failed to load transform for %s: %ld\n", algo,
-		       PTR_ERR(tfm));
-		return PTR_ERR(tfm);
-	}
-	desc.tfm = tfm;
-	desc.flags = 0;
-
-	crypto_blkcipher_clear_flags(tfm, ~0);
-  */
-  /*
-	//if (cipher_tv[0].wk)
-	//	crypto_blkcipher_set_flags( tfm, CRYPTO_TFM_REQ_WEAK_KEY);
-	//key = cipher_tv[0].key;
-  */
-
-  /*  TODO: Handle Key. Get it, decrypt it, call setkey */
-  /*
-	ret = crypto_blkcipher_setkey(tfm, key, klen);
-	if (ret) {
-		printk("setkey() failed flags=%x\n", crypto_blkcipher_get_flags(tfm));
-    printk(KERN_ALERT "Open Failed!\n");
-	}
-  */
- 
-
 	/* Success */
 	return 0;
 }
 
 static int encrypt_release(struct inode *inode, struct file *filp)
 {
-
   printk("Release Called, writing_data=%d\n", writing_data);
-
-  /* crypto cleanup */
-  //if(tfm) crypto_free_blkcipher(tfm);
 
   /* Fasync cleanup */
   if( writing_data ) encrypt_fasync(-1, filp, 0);
@@ -296,8 +252,11 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 	char *plain_text;
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
-
   printk("READ CALLED\n");
+  writing_data = 0;
+
+
+  /* CRYPTO STUFF */
   /* TODO: Un-pad the stored data */
   /* TODO: Load IV for file */
 
@@ -312,11 +271,6 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 	desc.flags = 0;
 
 	crypto_blkcipher_clear_flags(tfm, ~0);
-  /*
-	if (cipher_tv[0].wk)
-		crypto_blkcipher_set_flags( tfm, CRYPTO_TFM_REQ_WEAK_KEY);
-	key = cipher_tv[0].key;
-  */
 
   /*  TODO: Handle Key. Get it, decrypt it, call setkey */
 	ret = crypto_blkcipher_setkey(tfm, key, klen);
@@ -325,8 +279,7 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
     printk(KERN_ALERT "Open Failed!\n");
 	}
 
-
-  writing_data = 0;
+  /* REGULAR FILE IO STUFF */
 
 	/* end of buffer reached */
 	if (*f_pos >= encrypt_len)
@@ -378,13 +331,8 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
   printk("Decrypted data passed to user:\n");
 	hexdump(plain_text, count);
 
-
-
 	/* Transfering data to user space */
-	if (copy_to_user(buf, plain_text, count))
-	{
-		return -EFAULT;
-	}
+	if (copy_to_user(buf, plain_text, count)) return -EFAULT;
 
   /* Overwrite plaintext in temporary buffer */
   memcpy(local_buf, encrypt_buffer + *f_pos, count);
@@ -406,6 +354,10 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
   char *cipher_text;
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
+  printk(KERN_ALERT "Write Called, Count=%d\n",count);
+  writing_data = 1;
+
+  /* CRYTO STUFF */
 
   /* TODO: Pad the input to match the key size */
   /* TODO: Load IV for file */
@@ -434,9 +386,6 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
     printk(KERN_ALERT "Open Failed!\n");
 	}
 
-  printk(KERN_ALERT "Write Called Count=%d\n",count);
-  writing_data = 1;
-
 	/* end of buffer reached */
 	if (*f_pos >= capacity)
 	{
@@ -453,35 +402,27 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 	if (count > capacity - *f_pos)
 		count = capacity - *f_pos;
 
-  /* Allocate memory for local buffer. 
+  /* Allocate memory for local buffer.
    * Plain text will exist here, assuming the encryption happens in place */
 	local_buf = kmalloc(count, GFP_KERNEL);
 	if (!local_buf)
 	{
     printk(KERN_ALERT "Write Error: ");
-		printk(KERN_ALERT "Insufficient kernel memory for local buffer\n"); 
+		printk(KERN_ALERT "Insufficient kernel memory for local buffer\n");
     return 0; // no data written
 	}
 
 
   /* Get plain text from user */
-	if (copy_from_user(local_buf, buf, count))
-	{
-		return -EFAULT;
-	}
+	if (copy_from_user(local_buf, buf, count)) return -EFAULT;
 
   printk(KERN_ALERT "Plain text from user:\n");
   hexdump(local_buf, count);
 
   /* Encrypt plain text from user */
 	sg_set_buf(&sg[0], local_buf, count);
-
-  printk(KERN_ALERT "SG set!\n");
 	iv_len = crypto_blkcipher_ivsize(tfm);
-  
 	if (iv_len) crypto_blkcipher_set_iv(tfm, iv, iv_len);
-  printk(KERN_ALERT "IV set!\n");
-
 	ret = crypto_blkcipher_encrypt(&desc, sg, sg, count);
 
 	if (ret) {
@@ -508,10 +449,8 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
   /* Free Transform */
   crypto_free_blkcipher(tfm);
 
-
 	*f_pos += count;
 	encrypt_len = *f_pos;
-
 
   /* Send async signal */
 	if (async_queue) kill_fasync(&async_queue, SIGIO, POLL_IN);
