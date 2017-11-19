@@ -55,18 +55,32 @@ static int encrypt_init(void);
 
 static void hexdump(unsigned char *buf, unsigned int len);
 
+/*
+static int proc_read( char *page, char **start, off_t off,
+                   int count, int *eof, void *data);
+*/
+
+static int encrypt_fasync(int fd, struct file *filp, int mode);
 
 
 /* Structure that declares the usual file */
 /* access functions */
+/*
 struct file_operations encrypt_fops = {
 	read: encrypt_read,
 	write: encrypt_write,
 	open: encrypt_open,
-	release: encrypt_release
+  fasync: encrypt_fasync,
+	release: encrypt_release,
 };
-
-
+*/
+static struct file_operations encrypt_fops = {
+	.read = encrypt_read,
+	.write = encrypt_write,
+	.open = encrypt_open,
+  .fasync = encrypt_fasync,
+	.release = encrypt_release,
+};
 /* Declaration of the init and exit functions */
 module_init(encrypt_init);
 module_exit(encrypt_exit);
@@ -127,6 +141,16 @@ char iv[] = { 0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28,
 		.rlen   = 32,
 */
 
+
+/* Proc File Stuff */
+/*
+static struct proc_dir_entry *proc_entry;
+*/
+
+/* Fasync Stuff */
+int writing_data;
+struct fasync_struct *async_queue; /* asynchronous readers */
+
 static int encrypt_init(void)
 {
 	int result;
@@ -151,10 +175,25 @@ static int encrypt_init(void)
 	memset(encrypt_buffer, 0, capacity);
 	encrypt_len = 0;
 
+  /* Set up Proc file */
+  /*
+  proc_entry = create_proc_entry( "encrypt", 0644, NULL );
+
+  if (proc_entry == NULL) {
+    result = -ENOMEM;
+    printk(KERN_INFO "Encrypt error: Couldn't create proc entry\n");
+    goto fail;
+  }
+
+  proc_entry->read_proc = proc_read;
+  proc_entry->owner = THIS_MODULE;
+
+  */
 
   /* TODO: Load encrypted key */
   /* Use One password for entire drive */
 
+  writing_data = 0;
 
 	printk(KERN_ALERT "Inserting encrypt module\n"); 
 	return 0;
@@ -244,8 +283,15 @@ out:
 
 static int encrypt_release(struct inode *inode, struct file *filp)
 {
-	printk(KERN_INFO "release called: process id %d, command %s\n",
-		current->pid, current->comm);
+
+  printk("Release Called, writing_data=%d\n", writing_data);
+
+  if( writing_data )	{
+    encrypt_fasync(-1, filp, 0);
+
+  }
+
+
 	/* Success */
 	return 0;
 }
@@ -258,8 +304,11 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 	char *plain_text;
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
+
+  printk("READ CALLED\n");
   /* TODO: Un-pad the stored data */
 
+  writing_data = 0;
 
 	/* end of buffer reached */
 	if (*f_pos >= encrypt_len)
@@ -340,6 +389,7 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
   /* TODO: Pad the input to match the key size */
 
   printk(KERN_ALERT "Write Called Count=%d\n",count);
+  writing_data = 1;
 
 	/* end of buffer reached */
 	if (*f_pos >= capacity)
@@ -412,6 +462,10 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 	*f_pos += count;
 	encrypt_len = *f_pos;
 
+
+  /* Send async signal */
+	if (async_queue) kill_fasync(&async_queue, SIGIO, POLL_IN);
+
 	return count;
 }
 
@@ -447,6 +501,25 @@ static void hexdump(unsigned char *buf, unsigned int len)
     printk("%02x", *buf++);
 
   printk("\n");
+}
+
+/*
+static int proc_read( char *page, char **start, off_t off,
+                   int count, int *eof, void *data )
+{
+  if (off > 0) {
+    *eof = 1;
+    return 0;
+  }
+  len = sprintf(page, ""  );
+
+  return len;
+
+}
+*/
+static int encrypt_fasync(int fd, struct file *filp, int mode) {
+  printk("FASYNC Called\n");
+	return fasync_helper(fd, filp, mode, &async_queue);
 }
 
 

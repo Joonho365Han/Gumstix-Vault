@@ -1,12 +1,23 @@
 #! /bin/sh
 
-source /ad/eng/courses/ec/ec535/bashrc_ec535
+#export EC535=/ad/eng/courses/ec/ec535
+export EC535=/ad/eng/projects/linux/ec535
+# export SYSTEMC=${EC535}/systemc/systemc-2.2
+# export SYSTEMC_DEBUG=${EC535}/systemc/systemc-2.2-debug
+
+# This one is for the gumstix hardware
+#export PATH=${EC535}/gtkwave/bin:${EC535}/gumstix/oe/cross/bin:${EC535}/bin:${EC535}/usr/bin:${PATH}
+
+# This one is for the emulator
+export PATH=${EC535}/arm-linux/bin:${EC535}/bin:${EC535}/usr/bin:${PATH}
+
 
 
 # Project Specific stuff
 echo "Building Crypto"
 cd crypto
 make
+make encrypt2sd # user level program
 cd ..
 
 echo "Copying crypto dir"
