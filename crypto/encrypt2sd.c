@@ -6,6 +6,7 @@
 //#include <unistd.h>
 
 #define BUF_SIZE 128
+#define MAX_PATH_LENGTH 4096
 
 void sighandler(int);
 inline void read_encrypt( char* buf, int buf_size);
@@ -15,10 +16,12 @@ struct sigaction action, oa;
 int main(int argc, char **argv) {
 
   char *buf;
+  char *file_path;
 	int eFile, sdFile, oflags;
   FILE *proc_fp;
 
-  buf = (char*) malloc( BUF_SIZE);
+  buf = (char*)malloc( BUF_SIZE );
+  file_path = (char*)malloc ( MAX_PATH_LENGTH );
 
 loop_start:
 
@@ -51,8 +54,10 @@ loop_start:
   // Re open the file and read the data
   read_encrypt( buf, BUF_SIZE );
 
+  // Get destination file
+  read_encrypt_proc( file_path );
   // Write the buffer to the SD card
-  sdFile = open("/root/test.txt", O_RDWR);
+  sdFile = open( file_path, O_RDWR);
   if (sdFile < 0) printf("SDFILE ERROR!");
   write(sdFile, buf, BUF_SIZE);
 	close(sdFile);
@@ -72,8 +77,17 @@ void sighandler(int signo)
 inline void read_encrypt( char* buf, int buf_size) {
   int eFile;
 
-  eFile = open("/dev/encrypt", O_RDWR);
+  eFile = open("/dev/encrypt", O_RDONLY);
   read(eFile, buf, buf_size);
+	close(eFile);
+
+}
+
+inline void read_encrypt_proc( char* file_path) {
+  FILE *eFile;
+
+  eFile = fopen("/proc/encrypt", "r");
+  fscanf(eFile, "%s", file_path);
 	close(eFile);
 
 }

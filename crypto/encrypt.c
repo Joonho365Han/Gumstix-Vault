@@ -50,17 +50,18 @@ static ssize_t encrypt_read(struct file *filp,
 		char *buf, size_t count, loff_t *f_pos);
 static ssize_t encrypt_write(struct file *filp,
 		const char *buf, size_t count, loff_t *f_pos);
+static int encrypt_fasync(int fd, struct file *filp, int mode);
+
 static void encrypt_exit(void);
 static int encrypt_init(void);
 
 static void hexdump(unsigned char *buf, unsigned int len);
 
-/*
 static int proc_read( char *page, char **start, off_t off,
-                   int count, int *eof, void *data);
-*/
+    int count, int *eof, void *data);
+static int proc_write( struct file *filp, const char __user *buff,
+    unsigned long len, void *data);
 
-static int encrypt_fasync(int fd, struct file *filp, int mode);
 
 
 /* Structure that declares the usual file */
@@ -143,9 +144,10 @@ char iv[] = { 0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28,
 
 
 /* Proc File Stuff */
-/*
+#define MAX_PROC_LEN 4096
 static struct proc_dir_entry *proc_entry;
-*/
+static char *proc_buffer;
+static unsigned long proc_len;
 
 /* Fasync Stuff */
 int writing_data;
@@ -176,7 +178,6 @@ static int encrypt_init(void)
 	encrypt_len = 0;
 
   /* Set up Proc file */
-  /*
   proc_entry = create_proc_entry( "encrypt", 0644, NULL );
 
   if (proc_entry == NULL) {
@@ -186,9 +187,17 @@ static int encrypt_init(void)
   }
 
   proc_entry->read_proc = proc_read;
+  proc_entry->write_proc = proc_write;
   proc_entry->owner = THIS_MODULE;
 
-  */
+	proc_buffer= kmalloc( MAX_PROC_LEN, GFP_KERNEL);
+	if (!proc_buffer)
+	{
+		printk(KERN_ALERT "Encrypt: Insufficient kernel memory for proc_buffer\n"); 
+		result = -ENOMEM;
+		goto fail;
+	}
+	memset(proc_buffer, 0, MAX_PROC_LEN);
 
   /* TODO: Load encrypted key */
   /* Use One password for entire drive */
@@ -198,7 +207,7 @@ static int encrypt_init(void)
 	printk(KERN_ALERT "Inserting encrypt module\n"); 
 	return 0;
 
-fail: 
+fail:
 	encrypt_exit(); 
 	return result;
 }
@@ -213,6 +222,11 @@ static void encrypt_exit(void)
 	{
 		kfree(encrypt_buffer);
 	}
+	if (proc_buffer)
+	{
+		kfree(proc_buffer);
+	}
+
 
 	printk(KERN_ALERT "Removing encrypt module\n");
 
@@ -285,6 +299,9 @@ static int encrypt_release(struct inode *inode, struct file *filp)
 {
 
   printk("Release Called, writing_data=%d\n", writing_data);
+
+  /* crypto cleanup */
+	crypto_free_blkcipher(tfm);
 
   if( writing_data )	{
     encrypt_fasync(-1, filp, 0);
@@ -503,7 +520,6 @@ static void hexdump(unsigned char *buf, unsigned int len)
   printk("\n");
 }
 
-/*
 static int proc_read( char *page, char **start, off_t off,
                    int count, int *eof, void *data )
 {
@@ -511,12 +527,32 @@ static int proc_read( char *page, char **start, off_t off,
     *eof = 1;
     return 0;
   }
-  len = sprintf(page, ""  );
 
-  return len;
-
+  memcpy(page, proc_buffer, proc_len);
+  return proc_len;
 }
-*/
+
+static int proc_write( struct file *filp, const char __user *buff,
+    unsigned long len, void *data)
+{
+
+  proc_len = len;
+  if (proc_len > MAX_PROC_LEN) {
+    printk(KERN_ALERT "Encrypt: Proc file too large for proc buffer!\n");
+    return -ENOSPC;
+  }
+
+  printk("Encrypt: Proc len = %lu\n", proc_len);
+  if (copy_from_user( proc_buffer, buff, proc_len )) {
+    printk("Encrypt: Proc write copy from user error\n");
+    return -EFAULT;
+  }
+
+  printk("Encrypt: Proc write copy from user success\n");
+  return proc_len;
+}
+
+
 static int encrypt_fasync(int fd, struct file *filp, int mode) {
   printk("FASYNC Called\n");
 	return fasync_helper(fd, filp, mode, &async_queue);
