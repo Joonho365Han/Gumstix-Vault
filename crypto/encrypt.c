@@ -1,8 +1,8 @@
-/* Nibbler based encrypted buffer 
+ /* Nibbler based encrypted buffer
  *
  * Basic buffer structre:
  *
- * [ Encrypted Key][ IV ][Encrypted Data][ Encrypted Data length ]
+ * [ Encrypted Key][ char IV_len][ IV ][Encrypted Data][ Encrypted Data length ]
  *
  * The IV is prepended onto the encrypted data because to the decryption, it
  * looks like a block of cipher text.
@@ -39,6 +39,7 @@
 //#include <linux/moduleparam.h>
 #include <linux/timex.h>
 #include <linux/interrupt.h>
+#include <linux/random.h>
 #include "aes_test.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
@@ -61,8 +62,6 @@ static int proc_read( char *page, char **start, off_t off,
     int count, int *eof, void *data);
 static int proc_write( struct file *filp, const char __user *buff,
     unsigned long len, void *data);
-
-
 
 /* Structure that declares the usual file */
 /* access functions */
@@ -87,37 +86,29 @@ module_param(capacity, uint, S_IRUGO);
 /* module_param(bite, uint, S_IRUGO); */
 /* module_param(algo, charp, S_IRUGO); */
 
-
-/*
-static struct crypto_data {
-	char key[MAX_KEYLEN] __attribute__ ((__aligned__(4)));
-	char iv[MAX_IVLEN];
-	char input[bite];
-	unsigned char klen;
-	unsigned short ilen;
-};
-*/
-
 /* Global variables of the driver */
 /* Major number */
 static int encrypt_major = 61;
 
 /* Buffer to store data */
+static char *block_buffer;
 static char *encrypt_buffer;
 static int encrypt_len;
 
-
 /* Encrption variables */
-static unsigned int iv_len;
+#define IV_LEN 16
+static char *iv_len;
+static int new_iv;
 static struct crypto_blkcipher *tfm;
 static struct blkcipher_desc desc;
 
 /* TODO: REPLACE THE HARD CODED KEY!!! */
 char key[] = { 0xc2, 0x86, 0x69, 0x6d, 0x88, 0x7c, 0x9a, 0xa0,
 			    0x61, 0x1b, 0xbb, 0x3e, 0x20, 0x25, 0xa4, 0x5a };
-unsigned char klen   = 16;
-char iv[] = { 0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28,
-			    0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58 };
+unsigned char klen = 16;
+/* char iv[] = { 0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28,
+			    0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58 }; */
+static char *iv;
 
 /* Sample Input
 		.input  = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -137,9 +128,10 @@ char iv[] = { 0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28,
 
 /* Proc File Stuff */
 #define MAX_PROC_LEN 4096
+#define MAX_PATH_LEN 4096
 static struct proc_dir_entry *proc_entry;
 static char *proc_buffer;
-static unsigned long proc_len;
+static char *file_path;
 
 /* Fasync Stuff */
 int writing_data;
@@ -164,7 +156,8 @@ static int encrypt_init(void)
 	}
 
 	/* Allocating memory for the buffer */
-	encrypt_buffer = kmalloc(capacity, GFP_KERNEL);
+  /* [ iv_len] [ iv ] [ encrypted data ] */
+	encrypt_buffer = kmalloc(1 + IV_LEN + capacity, GFP_KERNEL);
 
 	if (!encrypt_buffer)
 	{
@@ -200,11 +193,24 @@ static int encrypt_init(void)
 
 	memset(proc_buffer, 0, MAX_PROC_LEN);
 
+	file_path = kmalloc( MAX_PATH_LEN, GFP_KERNEL);
+
+	if (!file_path)
+	{
+		printk(KERN_ALERT "Encrypt: Insufficient kernel memory for file_path\n"); 
+		result = -ENOMEM;
+		goto fail;
+	}
+
+	memset(file_path, 0, MAX_PATH_LEN);
+
+
   /* TODO: Load encrypted key */
   /* Use One password for entire drive */
 
   /* Misc initializations */
   writing_data = 0;
+  new_iv = 1;
 
 	printk(KERN_ALERT "Inserting encrypt module\n");
 	return 0;
@@ -222,6 +228,7 @@ static void encrypt_exit(void)
 	/* Freeing buffer memory */
 	if (encrypt_buffer) kfree(encrypt_buffer);
 	if (proc_buffer) kfree(proc_buffer);
+  if (file_path) kfree(file_path);
 
 	printk(KERN_ALERT "Removing encrypt module\n");
 
@@ -247,19 +254,30 @@ static int encrypt_release(struct inode *inode, struct file *filp)
 static ssize_t encrypt_read(struct file *filp, char *buf,
 							size_t count, loff_t *f_pos)
 {
-  int ret;
+  //int ret;
   char *local_buf;
-	char *plain_text;
-	struct scatterlist sg[1]; // does this need to be protected? can it be global?
+	//char *plain_text;
+	//struct scatterlist sg[1]; // does this need to be protected? can it be global?
 
   printk("READ CALLED\n");
   writing_data = 0;
 
+  /* Allocate a buffer big enough for IV and data */
+  local_buf = kmalloc( IV_LEN + capacity, GFP_KERNEL);
+
+	if (!local_buf)
+	{
+		printk(KERN_ALERT
+        "Insufficient kernel memory for encrypt_read local_buf\n");
+    return 0; // no data written
+	}
 
   /* CRYPTO STUFF */
+
   /* TODO: Un-pad the stored data */
   /* TODO: Load IV for file */
 
+  /*
 	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
 
 	if (IS_ERR(tfm)) {
@@ -272,13 +290,15 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 
 	crypto_blkcipher_clear_flags(tfm, ~0);
 
+  */
   /*  TODO: Handle Key. Get it, decrypt it, call setkey */
+  /*
 	ret = crypto_blkcipher_setkey(tfm, key, klen);
 	if (ret) {
 		printk("setkey() failed flags=%x\n", crypto_blkcipher_get_flags(tfm));
     printk(KERN_ALERT "Open Failed!\n");
 	}
-
+  */
   /* REGULAR FILE IO STUFF */
 
 	/* end of buffer reached */
@@ -292,10 +312,11 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 		count = encrypt_len - *f_pos;
 
 	/* do not send back more than a bite */
-	if (count > bite) count = bite;
+	/* if (count > bite) count = bite; */
 
   /* Allocate memory for local buffer. 
    * Plain text will exist here, assuming the encryption happens in place */
+  /*
 	local_buf = kmalloc(count, GFP_KERNEL);
 	if (!local_buf)
 	{
@@ -303,19 +324,24 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
 		printk(KERN_ALERT "Insufficient kernel memory for local buffer\n"); 
     return 0; // no data read
 	}
+  */
 
   /* Move the encrypted data the local buffer */
+  /*
   memcpy(local_buf, encrypt_buffer + *f_pos, count);
 
   printk("Encrypted data from buffer:\n");
   hexdump(local_buf, count);
-
+  */
   /* Set up decryption */
+  /*
 	sg_set_buf(&sg[0], local_buf, count);
 	iv_len = crypto_blkcipher_ivsize(tfm);
 	if (iv_len) crypto_blkcipher_set_iv(tfm, iv, iv_len);
 
+  */
   /* Decrypt the data */
+  /*
 	ret = crypto_blkcipher_decrypt(&desc, sg, sg, count);
 
 
@@ -324,22 +350,31 @@ static ssize_t encrypt_read(struct file *filp, char *buf,
     printk("Failed to decrypt during read!\n");
     return 0; // no data read
 	}
+  */
 
   /* This appears to get the decrypted data */
+  /*
 	plain_text = kmap(sg->page) + sg->offset;
 
-  printk("Decrypted data passed to user:\n");
 	hexdump(plain_text, count);
 
+  */
 	/* Transfering data to user space */
-	if (copy_to_user(buf, plain_text, count)) return -EFAULT;
+	if (copy_to_user(buf, encrypt_buffer + *f_pos, count)) return -EFAULT;
+
+  printk("encrypt_read count=%lu\n", (long unsigned)count);
+
+  printk("Encrypted data passed to user:\n");
+  hexdump(encrypt_buffer + *f_pos, count);
+
 
   /* Overwrite plaintext in temporary buffer */
+  /*
   memcpy(local_buf, encrypt_buffer + *f_pos, count);
   kfree(local_buf);
-
+  */
   /* Free Transform */
-  crypto_free_blkcipher(tfm);
+  /* crypto_free_blkcipher(tfm); */
 
 	/* Changing reading position as best suits */
 	*f_pos += count;
@@ -361,6 +396,8 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 
   /* TODO: Pad the input to match the key size */
   /* TODO: Load IV for file */
+  /* TODO: Store the last encrypted block of a write to use as the next IV */
+  /* TODO: Check that data is appropriate length: len % key_len == 0 */
 
 	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
 
@@ -396,7 +433,7 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 	}
 
 	/* do not eat more than a bite */
-	if (count > bite) count = bite;
+	/* if (count > bite) count = bite; */
 
 	/* do not go over the end */
 	if (count > capacity - *f_pos)
@@ -421,8 +458,9 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
 
   /* Encrypt plain text from user */
 	sg_set_buf(&sg[0], local_buf, count);
-	iv_len = crypto_blkcipher_ivsize(tfm);
-	if (iv_len) crypto_blkcipher_set_iv(tfm, iv, iv_len);
+	//iv_len = crypto_blkcipher_ivsize(tfm); // FOR NOW THE IV HAS TO BE 16 BYTES
+  if(new_iv) get_random_bytes( iv, (int)iv_len);
+  crypto_blkcipher_set_iv(tfm, iv, (int)iv_len);
 	ret = crypto_blkcipher_encrypt(&desc, sg, sg, count);
 
 	if (ret) {
@@ -430,12 +468,18 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
     return 0; // no data written
 	}
 
+
   printk(KERN_ALERT "Encryption Done!\n");
   /* This appears to get the decrypted data */
 	cipher_text = kmap(sg->page) + sg->offset;
 
   printk("Cipher text:\n");
 	hexdump(cipher_text, count);
+
+  /*  Save last block as next IV */
+  memcpy(iv, &cipher_text[ count - (int)iv_len], (int)iv_len);
+  printk("NEW IV VALUE:\n");
+  hexdump(iv, (int)iv_len);
 
   /* Copy the cipher text into the buffer */
   memcpy(encrypt_buffer + *f_pos, cipher_text, count);
@@ -450,7 +494,9 @@ static ssize_t encrypt_write(struct file *filp, const char *buf,
   crypto_free_blkcipher(tfm);
 
 	*f_pos += count;
+  /* TODO: Add IV_LEN to encrypt_len because it will always have an iv */
 	encrypt_len = *f_pos;
+  printk("ENCRYPT_LEN @ write: %d\n",encrypt_len);
 
   /* Send async signal */
 	if (async_queue) kill_fasync(&async_queue, SIGIO, POLL_IN);
@@ -495,33 +541,45 @@ static void hexdump(unsigned char *buf, unsigned int len)
 static int proc_read( char *page, char **start, off_t off,
                    int count, int *eof, void *data )
 {
+  // TODO: print new_iv
+  int proc_len;
+  printk("PROC_READ\n");
+
   if (off > 0) {
     *eof = 1;
     return 0;
   }
 
+  proc_len = sprintf(proc_buffer, "File_Path:\t%s\nBuffer_Length:\t%d\nNew_IV:\t%d\n",
+      file_path, encrypt_len, new_iv );
+
+  printk("PROC_LEN = %d\n",proc_len);
+  printk("%s\n", proc_buffer);
   memcpy(page, proc_buffer, proc_len);
+
   return proc_len;
 }
 
 static int proc_write( struct file *filp, const char __user *buff,
-    unsigned long len, void *data)
+    unsigned long count, void *data)
 {
 
-  proc_len = len;
-  if (proc_len > MAX_PROC_LEN) {
+  // TODO write new_iv
+  if ( count > MAX_PATH_LEN) {
     printk(KERN_ALERT "Encrypt: Proc file too large for proc buffer!\n");
     return -ENOSPC;
   }
 
-  printk("Encrypt: Proc len = %lu\n", proc_len);
-  if (copy_from_user( proc_buffer, buff, proc_len )) {
+  memset(proc_buffer, 0, MAX_PROC_LEN);
+  if (copy_from_user( proc_buffer, buff, count )) {
     printk("Encrypt: Proc write copy from user error\n");
     return -EFAULT;
   }
 
+  sscanf(proc_buffer, "%s %d", file_path, &new_iv);
+
   printk("Encrypt: Proc write copy from user success\n");
-  return proc_len;
+  return count;
 }
 
 

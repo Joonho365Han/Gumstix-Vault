@@ -5,23 +5,23 @@
 #include <fcntl.h>
 //#include <unistd.h>
 
-#define BUF_SIZE 128
 #define MAX_PATH_LENGTH 4096
 
 void sighandler(int);
 inline void read_encrypt( char* buf, int buf_size);
-inline void read_encrypt_proc( char* file_path);
+inline void read_encrypt_proc( char* file_path, int *buf_size, int *new_iv);
 
 struct sigaction action, oa;
 
 int main(int argc, char **argv) {
 
   char *buf;
+  int buf_size;
   char *file_path;
+  int new_iv;
 	int eFile, sdFile, oflags;
   FILE *proc_fp;
 
-  buf = (char*)malloc( BUF_SIZE );
   file_path = (char*)malloc ( MAX_PATH_LENGTH );
 
 loop_start:
@@ -52,17 +52,23 @@ loop_start:
  	close(eFile);
 
 
+  // Get destination file and file length
+  read_encrypt_proc( file_path, &buf_size, &new_iv);
+  printf("BUF_SIZE = %d\n", buf_size);
+
+  // Allocate memory for the buffer
+  buf = (char*)malloc( buf_size );
+  memset(buf,'0',buf_size);
 
   // Re open the file and read the data
-  read_encrypt( buf, BUF_SIZE );
+  read_encrypt( buf, buf_size);
 
-  // Get destination file
-  read_encrypt_proc( file_path );
   // Write the buffer to the SD card
   sdFile = open( file_path, O_RDWR );
   if (sdFile < 0) printf("SDFILE ERROR!");
-  write(sdFile, buf, BUF_SIZE);
+  write(sdFile, buf, buf_size);
 	close(sdFile);
+  free(buf);
 
   goto loop_start;
 
@@ -85,12 +91,12 @@ inline void read_encrypt( char* buf, int buf_size) {
 
 }
 
-inline void read_encrypt_proc( char* file_path) {
+inline void read_encrypt_proc( char* file_path, int *buf_size, int *new_iv) {
   FILE *eFile;
 
   eFile = fopen("/proc/encrypt", "r");
-  fscanf(eFile, "%*s %s", file_path);
-	close(eFile);
+  fscanf(eFile, "%*s %s %*s %d %*s %d", file_path, buf_size, new_iv);
+	fclose(eFile);
 
 }
 
