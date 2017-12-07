@@ -260,6 +260,9 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
   content_size |= ((int)local_buf[2]) << 8;
   content_size |= ((int)local_buf[3]);
 
+
+  printk(KERN_ALERT"Raw Content Size:\n");
+  hexdump(local_buf, 4);
   printk(KERN_ALERT"Content Size: %d\n", content_size);
 
   content = &local_buf[4];
