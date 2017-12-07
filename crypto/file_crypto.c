@@ -183,8 +183,8 @@ static ssize_t file_crypto_read(struct file *filp, char *buf,
   printk("RAW:\nread fpos = %d\n, count = %d\ntext_size = %d\n", *f_pos, count, text_size);
   writing_data = 0;
 
-  printk("Text:\n");
-  hexdump(text, text_size);
+  //printk("Text:\n");
+  //hexdump(text, text_size);
 	/* end of buffer reached */
   /*
 	if (*f_pos >= text_size) {
@@ -266,27 +266,41 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
 
   key = &local_buf[ 4+content_size ];
 
-
-	text = kmalloc(content_size, GFP_KERNEL);
-	if (!text)
-	{
-		printk(KERN_ALERT "Insufficient kernel memory for text buffer\n"); 
-		return -ENOMEM;
-	}
-
   printk(KERN_ALERT"ED flag: %02x\n",local_buf[count-1]);
-
   if ( local_buf[count-1] ) { // encrypt
+
+    text = kmalloc(content_size+iv_len, GFP_KERNEL);
+	  if (!text)
+	  {
+		  printk(KERN_ALERT "Insufficient kernel memory for text buffer\n"); 
+		  return -ENOMEM;
+	  }
+
     bytes_encrypted = encrypt_data(local_buf, text);
+    if ( bytes_encrypted != content_size + iv_len)
+    {
+      printk(KERN_ALERT "Did not encrypt or decrypt the right amount of data!\nBytes_encrypted: %d\ncontent_size: %d\n",bytes_encrypted,content_size);
+      return -EFAULT;
+    }
   }
   else { // decrypt
-    bytes_encrypted = decrypt_data(local_buf, text);
-  }
 
-  if ( bytes_encrypted != content_size )
-  {
-    printk(KERN_ALERT "Did not encrypt or decrypt the right amount of data!\nBytes_encrypted: %d\ncontent_size: %d\n",bytes_encrypted,content_size);
-    return -EFAULT;
+    text = kmalloc(content_size-iv_len, GFP_KERNEL);
+
+	  if (!text)
+	  {
+		  printk(KERN_ALERT "Insufficient kernel memory for text buffer\n"); 
+		  return -ENOMEM;
+	  }
+
+    bytes_encrypted = decrypt_data(local_buf, text);
+    /*
+    if ( bytes_encrypted != content_size-16 )
+    {
+      printk(KERN_ALERT "Did not encrypt or decrypt the right amount of data!\nBytes_encrypted: %d\ncontent_size: %d\n",bytes_encrypted,content_size);
+      return -EFAULT;
+    }
+    */
   }
 
   text_size = bytes_encrypted;
@@ -346,9 +360,6 @@ int encrypt_data(const char *buf, char *cipher_text)
 		return -ENOMEM;
 	}
 
-  /* CRYTO STUFF */
-
-  /* TODO: Pad the input to match the key size */
   /* TODO: Check that data is appropriate length: len % key_len == 0 */
 
 	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
@@ -389,11 +400,14 @@ int encrypt_data(const char *buf, char *cipher_text)
   printk(KERN_ALERT "Encryption Done!\n");
   /* This appears to get the decrypted data */
 	tmp_txt = kmap(sg->page) + sg->offset;
-  memcpy(cipher_text, tmp_txt, content_size);
+  memcpy(&cipher_text[16], tmp_txt, content_size);
+  memcpy(cipher_text, iv, iv_len);
 
 
   printk("Cipher text:\n");
-	hexdump(cipher_text, content_size);
+	hexdump(cipher_text, content_size + iv_len);
+  printk("\nIV:\n");
+  hexdump(iv, iv_len);
 
   /*  Save last block as next IV */
   //memcpy(iv, &cipher_text[ count - (int)*iv_len], (int)*iv_len);
@@ -403,7 +417,7 @@ int encrypt_data(const char *buf, char *cipher_text)
   /* Free Transform */
   crypto_free_blkcipher(tfm);
 
-	return content_size;
+	return content_size + 16;
 }
 
 
@@ -416,10 +430,12 @@ int decrypt_data(const char *buf, char *plain_text)
   char *content;
   char *key;
 
+  char *tmp_txt;
 	struct scatterlist sg[1]; // does this need to be protected? can it be global?
+  int decrypt_size;
   int ret;
 
-  printk(KERN_ALERT"Encrypting Data");
+  printk(KERN_ALERT"Decrypting Data");
 
   content_size = 0;
   content_size |= ((int)buf[0]) << 24;
@@ -431,11 +447,9 @@ int decrypt_data(const char *buf, char *plain_text)
   content = (char*)&buf[20];
 
   key = (char*)&buf[ 4+content_size ];
+  decrypt_size = content_size - iv_len;
 
-  /* CRYPTO STUFF */
-
-  /* TODO: Un-pad the stored data */
-  /* TODO: Load IV for file */
+  printk(KERN_ALERT"Raw Content Size: %d\n", content_size);
 
 	tfm = crypto_alloc_blkcipher(algo, 0, CRYPTO_ALG_ASYNC);
 
@@ -455,13 +469,13 @@ int decrypt_data(const char *buf, char *plain_text)
     printk(KERN_ALERT "Open Failed!\n");
 	}
 
-  //printk("Encrypted data from buffer:\n");
-  //hexdump(content, content_size);
+  printk("Encrypted data from buffer (with IV):\n");
+  hexdump(iv, content_size);
 
   /* Decrypt the data */
-	sg_set_buf(&sg[0], content, content_size);
+	sg_set_buf(&sg[0], content, decrypt_size);
 	crypto_blkcipher_set_iv(tfm, iv, iv_len);
-	ret = crypto_blkcipher_decrypt(&desc, sg, sg, content_size);
+	ret = crypto_blkcipher_decrypt(&desc, sg, sg, decrypt_size);
 
 	if (ret) {
 		printk("Decription failed flags=%x\n", desc.flags);
@@ -470,12 +484,15 @@ int decrypt_data(const char *buf, char *plain_text)
 	}
 
   /* This appears to get the decrypted data */
-	plain_text = kmap(sg->page) + sg->offset;
-	//hexdump(plain_text, count);
+	tmp_txt= kmap(sg->page) + sg->offset;
+  memcpy(plain_text, tmp_txt, decrypt_size);
+
+  printk("Decrypted data in decrypt_function, ds=%d:\n", decrypt_size);
+	hexdump(plain_text, decrypt_size);
 
   /* Free Transform */
   crypto_free_blkcipher(tfm);
 
-	return content_size;
+	return decrypt_size;
 }
 
