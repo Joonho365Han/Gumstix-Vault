@@ -235,8 +235,6 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
   char *content;
   char *key;
 
-
-
   printk(KERN_ALERT "Write Called, Count=%d\n",count);
   writing_data = 1; // for fasync
 
@@ -244,7 +242,7 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
 
 	if (!local_buf)
 	{
-		printk(KERN_ALERT "Insufficient kernel memory\n"); 
+		printk(KERN_ALERT "Insufficient kernel memory\n");
 		return -ENOMEM;
 	}
 

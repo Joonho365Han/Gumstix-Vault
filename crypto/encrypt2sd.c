@@ -99,4 +99,3 @@ inline void read_encrypt_proc( char* file_path, int *buf_size, int *new_iv) {
 	fclose(eFile);
 
 }
-
