@@ -1,5 +1,5 @@
 ifneq ($(KERNELRELEASE),)
-	obj-m := encrypt.o aes_test.o
+	obj-m := file_crypto.o #encrypt.o decrypt.o aes_test.o
 else
 	KERNELDIR := $(EC535)/gumstix/linux-2.6.21gum/
 	KERNELDIR_GUM := $(EC535)/gumstix/oe/linux-2.6.21/
@@ -19,10 +19,15 @@ encrypt2sd: encrypt2sd.o
 encrypt2sd.o: encrypt2sd.c
 	arm-linux-gcc -c encrypt2sd.c -o encrypt2sd.o
 
+fct: fct.o
+	arm-linux-gcc -o fct fct.o
+
+fct.o: fct.c
+	arm-linux-gcc -c fct.c -o fct.o
 
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) ARCH=$(ARCH) clean
-	rm encrypt2sd
+	#rm encrypt2sd
 
 endif
