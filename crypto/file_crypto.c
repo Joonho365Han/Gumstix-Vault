@@ -242,7 +242,7 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
 
 	if (!local_buf)
 	{
-		printk(KERN_ALERT "Insufficient kernel memory\n");
+		printk(KERN_ALERT "Insufficient kernel memory for local_buf\n");
 		return -ENOMEM;
 	}
 
@@ -259,8 +259,8 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
   content_size |= ((int)local_buf[3]);
 
 
-  printk(KERN_ALERT"Raw Content Size:\n");
-  hexdump(local_buf, 4);
+  //printk(KERN_ALERT"Raw Content Size:\n");
+  //hexdump(local_buf, 4);
   printk(KERN_ALERT"Content Size: %d\n", content_size);
 
   content = &local_buf[4];
@@ -384,7 +384,7 @@ int encrypt_data(const char *buf, char *cipher_text)
 
 
   printk(KERN_ALERT "Plain text from user:\n");
-  hexdump(content, content_size);
+  //hexdump(content, content_size);
 
   /* Encrypt plain text from user */
 	sg_set_buf(&sg[0], content, content_size);
@@ -406,9 +406,9 @@ int encrypt_data(const char *buf, char *cipher_text)
 
 
   printk("Cipher text:\n");
-	hexdump(cipher_text, content_size + iv_len);
+	//hexdump(cipher_text, content_size + iv_len);
   printk("\nIV:\n");
-  hexdump(iv, iv_len);
+  //hexdump(iv, iv_len);
 
   /*  Save last block as next IV */
   //memcpy(iv, &cipher_text[ count - (int)*iv_len], (int)*iv_len);
@@ -471,7 +471,7 @@ int decrypt_data(const char *buf, char *plain_text)
 	}
 
   printk("Encrypted data from buffer (with IV):\n");
-  hexdump(iv, content_size);
+  //hexdump(iv, content_size);
 
   /* Decrypt the data */
 	sg_set_buf(&sg[0], content, decrypt_size);
@@ -489,7 +489,7 @@ int decrypt_data(const char *buf, char *plain_text)
   memcpy(plain_text, tmp_txt, decrypt_size);
 
   printk("Decrypted data in decrypt_function, ds=%d:\n", decrypt_size);
-	hexdump(plain_text, decrypt_size);
+	//hexdump(plain_text, decrypt_size);
 
   /* Free Transform */
   crypto_free_blkcipher(tfm);

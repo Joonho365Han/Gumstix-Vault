@@ -1,5 +1,5 @@
 ifneq ($(KERNELRELEASE),)
-	obj-m := file_crypto.o #encrypt.o decrypt.o aes_test.o
+	obj-m := file_crypto.o aes_test.o#encrypt.o decrypt.o aes_test.o
 else
 	KERNELDIR := $(EC535)/gumstix/linux-2.6.21gum/
 	KERNELDIR_GUM := $(EC535)/gumstix/oe/linux-2.6.21/

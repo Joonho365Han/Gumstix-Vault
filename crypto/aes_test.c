@@ -3,6 +3,7 @@
 #include <linux/module.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/vmalloc.h>
 #include <linux/scatterlist.h>
 #include <linux/string.h>
 #include <linux/crypto.h>
@@ -133,9 +134,20 @@ static int __init init(void)
 
   test_cipher("cbc(aes)", ENCRYPT, aes_cbc_enc_tv_template );
   test_cipher("cbc(aes)", DECRYPT, aes_cbc_dec_tv_template );
-
-
 	kfree(tvmem);
+
+
+  char* vp;
+
+  vp = vmalloc(4*1024*1024);
+  if(vp) {
+    vfree(vp);
+    printk(KERN_ALERT"Allocation Successful");
+  }
+  else {
+    printk(KERN_ALERT"Allocation Failed");
+    return -ENOMEM;
+  }
 
 	/* We intentionaly return -EAGAIN to prevent keeping
 	 * the module. It does all its work from init()
