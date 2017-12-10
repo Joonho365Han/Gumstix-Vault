@@ -2,21 +2,37 @@ $(function(){
 
 	var updateFilelist = function(){
 
-		// List stored
-		var connection = new WebSocket("ws://10.0.0.2",'json');
-		connection.onopen = function () { connection.send("U"); };
-		connection.onmessage = function (e) {
+		//  List stored
 
-			var files = JSON.parse(e.data);
-			var txt = "";
-			for (var i = 0; i < files.length; i++)
-			{
-				txt += files[i] + "<br>";
-			}
-			//  List files on vaultstix
-			document.getElementById("encryptedFiles").innerHTML = txt;
-		};
-		connection.onerror = function (error) { alert('Error: websocket connection failed: ' + error); };
+		$.post("http://10.0.0.1", 'U', function (data) {
+
+			console.log(data);
+			// var files = JSON.parse(e.data);
+			// var txt = "";
+			// for (var i = 0; i < files.length; i++)
+			// {
+			// 	txt += files[i] + "<br>";
+			// }
+			// //  List files on vaultstix
+			// document.getElementById("encryptedFiles").innerHTML = txt;
+
+		}, "text");
+
+		
+		// var connection = new WebSocket("ws://10.0.0.2",'json');
+		// connection.onopen = function () { connection.send("U"); };
+		// connection.onmessage = function (e) {
+
+		// 	var files = JSON.parse(e.data);
+		// 	var txt = "";
+		// 	for (var i = 0; i < files.length; i++)
+		// 	{
+		// 		txt += files[i] + "<br>";
+		// 	}
+		// 	//  List files on vaultstix
+		// 	document.getElementById("encryptedFiles").innerHTML = txt;
+		// };
+		// connection.onerror = function (error) { alert('Error: websocket connection failed: ' + error); };
 	};
 	updateFilelist();
 
@@ -46,19 +62,29 @@ $(function(){
 				continue;
 			}
 
-			//  First, send file metadata to enable buffer.
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("C"+file.size.toString()+'\0'); };
-			connection.onmessage = function (e) {
+			$.post("http://10.0.0.1", "C"+file.size.toString()+'\0', function (data) {
 				//  Check for status
-				if (e.data == "Ready")
-					connection.send(file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + '\0');
-				else if (e.data == "ENOMEM")
-					alert('Error: File is larger than 250MB.');
-				else
-					alert('Error: unknown encryption message: ' + e.data);
-			};
-			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + file.name + '" ' + error); };
+				console.log(data);
+				// if (e.data == "Ready")
+				// 	connection.send(file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + '\0');
+				// else if (e.data == "ENOMEM")
+				// 	alert('Error: File is larger than 250MB.');
+				// else
+				// 	alert('Error: unknown encryption message: ' + e.data);
+			}, "text");
+			//  First, send file metadata to enable buffer.
+			// var connection = new WebSocket("ws://10.0.0.2",'json');
+			// connection.onopen = function () { connection.send("C"+file.size.toString()+'\0'); };
+			// connection.onmessage = function (e) {
+			// 	//  Check for status
+			// 	if (e.data == "Ready")
+			// 		connection.send(file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + '\0');
+			// 	else if (e.data == "ENOMEM")
+			// 		alert('Error: File is larger than 250MB.');
+			// 	else
+			// 		alert('Error: unknown encryption message: ' + e.data);
+			// };
+			// connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + file.name + '" ' + error); };
 		}
 		updateFilelist();
 	});
@@ -82,19 +108,19 @@ $(function(){
 		{
 			var filename = files[i].trim().name;
 
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("R" + $("#key").val().padStart(16, 0) + filename + '\0'); };
-			connection.onmessage = function (e) {
-				//  Return a JSON object
-				var message = e.data;
+			// var connection = new WebSocket("ws://10.0.0.2",'json');
+			// connection.onopen = function () { connection.send("R" + $("#key").val().padStart(16, 0) + filename + '\0'); };
+			// connection.onmessage = function (e) {
+			// 	//  Return a JSON object
+			// 	var message = e.data;
 
-				//  Check for status
-				if (message.substring(0,7) == "Success")
-					saveAs(new Blob([message.substring(7)], {type: "image"}), filename);
-				else
-					alert('Error: unknown decryption message: ' + message);
-			};
-			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
+			// 	//  Check for status
+			// 	if (message.substring(0,7) == "Success")
+			// 		saveAs(new Blob([message.substring(7)], {type: "image"}), filename);
+			// 	else
+			// 		alert('Error: unknown decryption message: ' + message);
+			// };
+			// connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
 		}
 	});
 
@@ -113,10 +139,10 @@ $(function(){
 		{
 			var filename = files[i].trim().name;
 
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("D"+filename+'\0'); };
-			connection.onmessage = function (e) { alert("Delete message: " + e.data + filename); };
-			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
+			// var connection = new WebSocket("ws://10.0.0.2",'json');
+			// connection.onopen = function () { connection.send("D"+filename+'\0'); };
+			// connection.onmessage = function (e) { alert("Delete message: " + e.data + filename); };
+			// connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
 		}
 
 		updateFilelist();
