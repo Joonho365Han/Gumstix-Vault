@@ -4,7 +4,7 @@ $(function(){
 
 		//  List stored
 
-		$.post("http://10.0.0.1", 'U', function (data) {
+		$.post("http://10.0.0.100", 'U', function (data) {
 
 			console.log(data);
 			// var files = JSON.parse(e.data);
@@ -62,7 +62,7 @@ $(function(){
 				continue;
 			}
 
-			$.post("http://10.0.0.1", "C"+file.size.toString()+'\0', function (data) {
+			$.post("http://10.0.0.100", "C"+file.size.toString()+'\0', function (data) {
 				//  Check for status
 				console.log(data);
 				// if (e.data == "Ready")
