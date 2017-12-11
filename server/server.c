@@ -195,7 +195,7 @@ int main(int argc, char *argv[])
         }
         else if (*request == 'U')
         {
-            //  PRepare file list buffer
+            //  Prepare file list buffer
             int   len   = 1;
             char *files = malloc(len);
             files[0] = '[';
