@@ -158,7 +158,7 @@ int main(int argc, char *argv[])
             memcpy(filename, request+1+16, 256);
 
             //  Open file
-            FILE *file = fopen(filename, "r");
+            FILE *file = fopen(filename, "rb");
             if (file < 0)
                 error("ERROR could not open file to write");
 
@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
 
             //  Allocate enough memory for decryption driver buffer
             free(request);
-            request = calloc(file_size+16+1, 1);
+            request = calloc(4+file_size+16+1, 1);
             if (request == NULL){
                 if (write(newsockfd,"ENOMEM",7) < 0)
                     error("ERROR writing to socket");
@@ -180,6 +180,14 @@ int main(int argc, char *argv[])
             }
 
             //  Format decryption buffer
+            request[0] = ( file_size & 0xff000000
+            int msg_size= 0;
+            msg_size |= (request[1] & 0xff000000) >> 24;
+            msg_size |= (request[2] & 0x00ff0000) >> 16;
+            msg_size |= (request[3] & 0x0000ff00) >> 8;
+            msg_size |= (request[4] & 0x000000ff);
+
+
             if (fread(request, file_size, 1, file) < file_size)
                 error("ERROR could not read encrypted file");
             int byte_padd = *((int*) request);
