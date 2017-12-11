@@ -11,7 +11,7 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/stat.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -36,6 +36,8 @@ void hexdump(unsigned char *buf, unsigned int len)
 
 int main(int argc, char *argv[])
 {
+    int n;
+
     if (argc < 2) {
         fprintf(stderr,"ERROR, no port provided\n");
         exit(-1);
@@ -130,10 +132,11 @@ int main(int argc, char *argv[])
             printf("Write Done\n");
 
 
-            int j,i;
+            /*
             j=0;
             for (i=0; i<1000000; i++)
               j = j+i;
+            */
 
 
             // Subtract non contentn fields, add space for IV
@@ -180,51 +183,58 @@ int main(int argc, char *argv[])
             }
 
             //  Format decryption buffer
-            request[0] = ( file_size & 0xff000000
-            int msg_size= 0;
-            msg_size |= (request[1] & 0xff000000) >> 24;
-            msg_size |= (request[2] & 0x00ff0000) >> 16;
-            msg_size |= (request[3] & 0x0000ff00) >> 8;
-            msg_size |= (request[4] & 0x000000ff);
+            // Set file size
+            request[0] = ( file_size & 0xff000000) >> 24;
+            request[1] = ( file_size & 0x00ff0000) >> 16;
+            request[2] = ( file_size & 0xff00ff00) >> 8;
+            request[3] = ( file_size & 0xff0000ff);
 
-
-            if (fread(request, file_size, 1, file) < file_size)
+            // Fill file content
+            if (fread(&request[4], file_size, 1, file) < 1)
                 error("ERROR could not read encrypted file");
-            int byte_padd = *((int*) request);
-            *((int*) request) = file_size - sizeof(int);
+
+            // set key
             memcpy(request+file_size, key, 16);
 
+            // set decrypt flag
+            request[4+file_size+16] = 0x00;
+
             //  Open decryption drive
-            int eFile = open("/dev/encrypt", O_RDWR);
+            int eFile = open("/dev/file_crypto", O_RDWR);
             if (eFile < 0)
                 error("ERROR encrypt module isn't loaded");
-            fcntl(eFile, F_SETOWN, getpid());
-            fcntl(eFile, F_SETFL, fcntl(eFile, F_GETFL) | O_ASYNC);
 
             //  Pass file to decryptor
-            if (write(eFile, request, file_size+16+1) < 0)
+            if (write(eFile, request, 4+file_size+16+1) < 0)
                 error("ERROR could not write to decryptor");
+            free(request);
 
-            //  Go to sleep and wait to be awoken
-            struct sigaction handler;
-            sigemptyset(&handler.sa_mask);
-            handler.sa_handler = sighandler;
-            handler.sa_flags = SA_SIGINFO;
-            sigaction(SIGIO, &handler, NULL);
-            pause();
+            // Send file size
+            requets = malloc(4);
+            request[0] = ( file_size & 0xff000000) >> 24;
+            request[1] = ( file_size & 0x00ff0000) >> 16;
+            request[2] = ( file_size & 0xff00ff00) >> 8;
+            request[3] = ( file_size & 0xff0000ff);
+            n = write(newsockfd, request, 4);
+            if( n != 4)
+            {
+              error("ERROR writing to socket");
+              close(newsockfd);
+              free(request);
+              continue;
+            }
 
-            /////  Awoke
-
-            //  Read decrypted data = filesize - sizeof(int) - padding - added IV size
-            if (read(eFile, request+7, file_size - sizeof(int) - 16 - byte_padd) < 0)
+            //  Read decrypted data
+            free(request);
+            request = malloc(file_size);
+            if (read(eFile, request, file_size) < 0)
                 error("ERROR Could not read from decryptor");
 
             //  Send file content
-            strncpy(request, "Success", 7);
-            if (write(newsockfd, request, 7+file_size-sizeof(int)-16-byte_padd) < 0)
+            if (write(newsockfd, request, file_size) < 0)
                 error("ERROR writing to socket");
         }
-        
+
         else if (*request == 'D')
         {
             //  Read filename

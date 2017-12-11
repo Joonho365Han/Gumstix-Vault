@@ -44,9 +44,18 @@ int main(int argc, char *argv[])
     return 0;
   }
 
+  // Check for valic read/write command
   if( *argv[1] != 'r' & *argv[1] != 'w' )
   {
-    printf("arg1");
+    printf("Error: Bad Read/Write command. Expecting 'r' or 'w'");
+    print_usage();
+    return 0;
+  }
+
+  // Check that file path is not to long
+  if( strlen(argv[2]) > 255)
+  {
+    printf("Error: File name is too long! Max length is 255 charachters");
     print_usage();
     return 0;
   }
@@ -122,18 +131,24 @@ int main(int argc, char *argv[])
   }
   else { // read file
 
-
-    buffer = malloc( strlen(argv[2]) + 1);
+    buffer = malloc( 1 + 16 + 255 );
+    memset(buffer, 0, 1 + 16 + 255);
     buffer[0] = 'R';
-    memcpy(&buffer[1], argv[2], strlen(argv[2]));
+    // set key
+    key_len = strlen(argv[3]);
+    if (key_len > 16) key_len = 16;
+    memcpy(&buffer[1], argv[3], key_len);
+
+    memcpy(&buffer[1+16], argv[2], strlen(argv[2]));
 
     n = write(sockfd,buffer,strlen(argv[2]) + 1);
-    if(n != strlen(argv[2]) + 1) printf("Error read: There was a problem writing the data");
+    if(n != strlen(argv[2]) + 1) printf("Error Read: There was a problem writing the data");
+    free(buffer);
 
     // read file size
-    free(buffer);
     buffer = malloc(4);
     n = read(sockfd, buffer, 4);
+    if(n != 4) printf("Error Read: There was a problem reading the file size\n");
 
     int file_size = 0;
 
@@ -141,15 +156,18 @@ int main(int argc, char *argv[])
     file_size |= buffer[1] << 16;
     file_size |= buffer[2] << 8;
     file_size |= buffer[3];
-
     free(buffer);
+
+    // Get file
     buffer = malloc(file_size);
     n = read(sockfd, buffer, file_size);
+    if( n != file_size) printf("Error Read: There was a problem reading the file data\n");
 
     FILE *f = fopen(argv[2], "wb");
-    fwrite(buffer, 1, file_size, f);
+    n = fwrite(buffer, file_size, 1, f);
     fclose(f);
 
+    if(n != 1) printf("Error Read: There was a problem writing the data to the local disk\n");
   }
 
   return 0;
