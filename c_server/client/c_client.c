@@ -33,6 +33,7 @@ int main(int argc, char *argv[])
   int sockfd, newsockfd, portno, clilen;
   char *buffer;
   int n;
+  int pad_len;
 
   char *file_buffer;
   int file_size;
@@ -81,6 +82,14 @@ int main(int argc, char *argv[])
     int fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
+    // The encryption module needs file sizes in multiples of 16, so we
+    // pad the input here and store how many bytes we added at the start of the
+    // file. We will remove it during a read
+    int original_size = fsize;
+    fsize += 1; // byte to store pad len
+    pad_len = 16 - ( fsize % 16);
+    fsize += pad_len;
+
     printf("File Size: %d\n", fsize);
     int msg_size = 4 + fsize + 16 + 1;
 
@@ -92,6 +101,8 @@ int main(int argc, char *argv[])
     buffer[4] = (msg_size & 0x000000ff);
 
     strcpy(&buffer[5], argv[2]);
+
+    printf("MSG size: %d\n%02x%02x%02x%02x\n",msg_size,buffer[1],buffer[2],buffer[3],buffer[4]);
 
 
     n = write(sockfd, buffer, 1 + 4 + 255 );
@@ -108,7 +119,9 @@ int main(int argc, char *argv[])
     //buffer = malloc(4 + fsize + 1 + 16 + 1); // why +1 betweek content and key
     buffer = malloc(4 + fsize + 16 + 1);
     memset(buffer, 0, 4+fsize+16+1);
-    fread(&buffer[4], fsize, 1, f);
+    //fread(&buffer[4], fsize, 1, f);
+    buffer[4] = pad_len;
+    fread(&buffer[5], original_size, 1, f);
     fclose(f);
 
     // set size
@@ -156,6 +169,7 @@ int main(int argc, char *argv[])
 
     int file_size = 0;
 
+    // Get the padded file size
     file_size |= buffer[0] << 24;
     file_size |= buffer[1] << 16;
     file_size |= buffer[2] << 8;
@@ -173,7 +187,8 @@ int main(int argc, char *argv[])
     }
 
     FILE *f = fopen(argv[2], "wb");
-    n = fwrite(buffer, file_size, 1, f);
+    // skip the pad byte and padding at the end
+    n = fwrite(&buffer[1], file_size-(int)buffer[0], 1, f);
     fclose(f);
 
     if(n != 1) printf("Error Read: There was a problem writing the data to the local disk\n");
