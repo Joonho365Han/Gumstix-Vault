@@ -3,11 +3,14 @@ $(function(){
 	var updateFilelist = function(){
 
 		// List stored
-		var connection = new WebSocket("ws://10.0.0.2",'json');
-		connection.onopen = function () { connection.send("U"); };
+		var connection = new WebSocket("ws://10.0.0.100:81");
+		connection.onopen = function () { connection.send(JSON.stringify({
+			data: "U"
+		})); };
 		connection.onmessage = function (e) {
 
-			var files = JSON.parse(e.data);
+			console.log(e);
+			var files = JSON.parse(e);
 			var txt = "";
 			for (var i = 0; i < files.length; i++)
 			{
@@ -47,12 +50,17 @@ $(function(){
 			}
 
 			//  First, send file metadata to enable buffer.
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("C"+file.size.toString()+'\0'); };
+			var connection = new WebSocket("ws://10.0.0.100:81");
+			connection.onopen = function () { connection.send(JSON.stringify({
+				data: "C"+file.size.toString()+'\0'
+			})); };
 			connection.onmessage = function (e) {
 				//  Check for status
+			console.log(e);
 				if (e.data == "Ready")
-					connection.send(file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + '\0');
+					connection.send(JSON.stringify({
+						data: file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + "\0"
+					}));
 				else if (e.data == "ENOMEM")
 					alert('Error: File is larger than 250MB.');
 				else
@@ -82,10 +90,13 @@ $(function(){
 		{
 			var filename = files[i].trim().name;
 
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("R" + $("#key").val().padStart(16, 0) + filename + '\0'); };
+			var connection = new WebSocket("ws://10.0.0.100:81");
+			connection.onopen = function () { connection.send(JSON.stringify({
+				data: "R" + $("#key").val().padStart(16, 0) + filename + "\0"
+			})); };
 			connection.onmessage = function (e) {
 				//  Return a JSON object
+			console.log(e);
 				var message = e.data;
 
 				//  Check for status
@@ -113,8 +124,10 @@ $(function(){
 		{
 			var filename = files[i].trim().name;
 
-			var connection = new WebSocket("ws://10.0.0.2",'json');
-			connection.onopen = function () { connection.send("D"+filename+'\0'); };
+			var connection = new WebSocket("ws://10.0.0.100:81");
+			connection.onopen = function () { connection.send(JSON.stringify({
+				data: "D"+filename+"\0"
+			})); };
 			connection.onmessage = function (e) { alert("Delete message: " + e.data + filename); };
 			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
 		}
