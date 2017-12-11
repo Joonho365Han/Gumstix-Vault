@@ -10,7 +10,8 @@ $(function(){
 		connection.onmessage = function (e) {
 
 			console.log(e);
-			var files = JSON.parse(e);
+			var files = JSON.parse(e.data).data;
+			console.log(files);
 			var txt = "";
 			for (var i = 0; i < files.length; i++)
 			{
@@ -57,14 +58,14 @@ $(function(){
 			connection.onmessage = function (e) {
 				//  Check for status
 			console.log(e);
-				if (e.data == "Ready")
+				if (JSON.parse(e.data).data == "Ready")
 					connection.send(JSON.stringify({
 						data: file.slice(0) + new Array(16 - file.size%16 + 1).join('0') + $("#key").val().padStart(16, 0) + 'E' + file.name + "\0"
 					}));
-				else if (e.data == "ENOMEM")
+				else if (JSON.parse(e.data).data == "ENOMEM")
 					alert('Error: File is larger than 250MB.');
 				else
-					alert('Error: unknown encryption message: ' + e.data);
+					alert('Error: unknown encryption message: ' + JSON.parse(e.data).data);
 			};
 			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + file.name + '" ' + error); };
 		}
@@ -97,7 +98,7 @@ $(function(){
 			connection.onmessage = function (e) {
 				//  Return a JSON object
 			console.log(e);
-				var message = e.data;
+				var message = JSON.parse(e.data).data;
 
 				//  Check for status
 				if (message.substring(0,7) == "Success")
@@ -128,7 +129,7 @@ $(function(){
 			connection.onopen = function () { connection.send(JSON.stringify({
 				data: "D"+filename+"\0"
 			})); };
-			connection.onmessage = function (e) { alert("Delete message: " + e.data + filename); };
+			connection.onmessage = function (e) { alert("Delete message: " + JSON.parse(e.data).data + filename); };
 			connection.onerror = function (error) { alert('Error: websocket connection failed: file "' + filename + '" ' + error); };
 		}
 

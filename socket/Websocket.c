@@ -406,7 +406,8 @@ void *handleClient(void *args) {
 			printf("Received message: %s\n", n->message->msg);
 
 			/* SEND REPLY RIGHT HERE /////////////////////////////////////////////////////////////////////////////////// */
-			char *request = n->message->enc + 11;
+			char *request = n->message->msg + 9;
+			int len;
 
 		        if (*request == 'C')
 		        {
@@ -539,7 +540,7 @@ void *handleClient(void *args) {
 		        {
 		        	printf("Received request: %c\n", *request);
 		            //  Prepare file list buffer
-		            int   len   = 1;
+		                  len   = 1;
 		            char *files = malloc(len);
 		            files[0] = '[';
 
@@ -567,16 +568,24 @@ void *handleClient(void *args) {
 		                files = realloc(files, ++len);
 		            files[len-1] = ']';
 
-		            printf("File list generated: %s%c\n", files, '\0');
+		            //  NECESSARYY !!!!! ENCODE + Replace the return message with file list
+		            //  Reason: The socket sends message in a certain format, according to encodeMessage().
+		            free(n->message->enc); // do this
+		            n->message->msg = realloc(n->message->msg, len+9);
+		            if (n->message->msg == NULL)
+		            	printf("ERROR: Could not realloc mem\n");
+		            memcpy(n->message->msg + 8, files, len);
+		            n->message->msg[9+len-1] = '}';
+		            n->message->len = len + 9;
+		            int status;
+					if ( (status = encodeMessage(n->message)) != CONTINUE) {
+						message_free(n->message);
+						free(n->message);
+						raise(SIGINT);
+						break;;
+					}
 
-		            //  Replace the return message with file list.
-		            n->message->enc = realloc(n->message->enc, len+12);
-		            memcpy(n->message->enc + 10, files, len);
-		            n->message->enc[10+len] = '}';
-		            n->message->enc[10+len+1] = '\0';
-		            n->message->enc_len = len + 11;
-
-		            printf("Final message: %s\n", n->message->enc);
+		            printf("Final message length in Websockets: %d\n", n->message->len );
 		        }
 		        else if (*request == 'D')
 		        {

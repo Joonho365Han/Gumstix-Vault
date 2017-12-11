@@ -348,6 +348,7 @@ void ws_send(ws_client *n, ws_message *m) {
 		
 	} else if ( n->headers->type == HYBI07 || n->headers->type == RFC6455 
 			|| n->headers->type == HYBI10) {
+		printf("Message length: %d\n", m->len);
 		send(n->socket_id, m->enc, m->enc_len, 0);
 	}
 }
