@@ -188,7 +188,8 @@ int main(int argc, char *argv[])
 
     FILE *f = fopen(argv[2], "wb");
     // skip the pad byte and padding at the end
-    n = fwrite(&buffer[1], file_size-(int)buffer[0], 1, f);
+    printf("Pad len: %d\n", (int)buffer[0]);
+    n = fwrite(&buffer[1], file_size-(int)buffer[0]-1, 1, f);
     fclose(f);
 
     if(n != 1) printf("Error Read: There was a problem writing the data to the local disk\n");
