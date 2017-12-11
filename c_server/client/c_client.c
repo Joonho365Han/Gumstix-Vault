@@ -53,9 +53,9 @@ int main(int argc, char *argv[])
   }
 
   // Check that file path is not to long
-  if( strlen(argv[2]) > 255)
+  if( strlen(argv[2]) > 250)
   {
-    printf("Error: File name is too long! Max length is 255 charachters");
+    printf("Error: File name is too long! Max length is 250 charachters");
     print_usage();
     return 0;
   }
@@ -81,6 +81,7 @@ int main(int argc, char *argv[])
     int fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
 
+    printf("File Size: %d\n", fsize);
     int msg_size = 4 + fsize + 16 + 1;
 
     buffer = malloc(1 + 4 + 255);
@@ -131,18 +132,21 @@ int main(int argc, char *argv[])
   }
   else { // read file
 
-    buffer = malloc( 1 + 16 + 255 );
+    buffer = malloc( 1 + 16 + 255 + 1 ); // + 1 for null char
     memset(buffer, 0, 1 + 16 + 255);
     buffer[0] = 'R';
+
     // set key
     key_len = strlen(argv[3]);
     if (key_len > 16) key_len = 16;
     memcpy(&buffer[1], argv[3], key_len);
 
-    memcpy(&buffer[1+16], argv[2], strlen(argv[2]));
+    // set file name
+    printf("file name: %s\nfile name len: %lu\n", argv[2], strlen(argv[2]));
+    memcpy(&buffer[1+16], argv[2], strlen(argv[2])+1 ); // +1 for null char
 
-    n = write(sockfd,buffer,strlen(argv[2]) + 1);
-    if(n != strlen(argv[2]) + 1) printf("Error Read: There was a problem writing the data");
+    n = write(sockfd, buffer, 1 + 16 + strlen(argv[2]) + 1 );
+    if(n != 1+16+strlen(argv[2]) + 1) printf("Error Read: There was a problem writing the data");
     free(buffer);
 
     // read file size
@@ -158,10 +162,15 @@ int main(int argc, char *argv[])
     file_size |= buffer[3];
     free(buffer);
 
+    printf("Incoming File Size: %d\n", file_size);
+
     // Get file
     buffer = malloc(file_size);
     n = read(sockfd, buffer, file_size);
-    if( n != file_size) printf("Error Read: There was a problem reading the file data\n");
+    if( n != file_size) {
+      printf("Error Read: There was a problem reading the file data\n");
+      printf("Read data size: %d\n", n);
+    }
 
     FILE *f = fopen(argv[2], "wb");
     n = fwrite(buffer, file_size, 1, f);
