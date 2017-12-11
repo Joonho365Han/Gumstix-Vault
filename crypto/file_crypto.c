@@ -88,7 +88,7 @@ int text_size;
 #define IV_LEN 16
 #define KEY_LEN 16
 static unsigned int iv_len;
-static struct crypto_blkcipher *tfm;
+static struct crypto_blkcipher *tfm = NULL;
 static struct blkcipher_desc desc;
 static char algo[] = "cbc(aes)";
 
@@ -138,6 +138,8 @@ static int file_crypto_init(void)
 		return result;
 	}
 
+  local_buf = NULL;
+  text = NULL;
 
   /* Misc initializations */
   writing_data = 0;
@@ -154,8 +156,14 @@ static void file_crypto_exit(void)
 	unregister_chrdev(file_crypto_major, "file_crypto");
 
 	/* Freeing buffer memory */
-	if (local_buf) kfree(local_buf);
-	if (text) kfree(text);
+	if (local_buf) {
+    kfree(local_buf);
+    local_buf = NULL;
+  }
+	if (text) {
+    kfree(text);
+    text = NULL;
+  }
 
 	printk(KERN_ALERT "Removing encrypt module\n");
 }
@@ -169,7 +177,7 @@ static int file_crypto_open(struct inode *inode, struct file *filp)
 static int file_crypto_release(struct inode *inode, struct file *filp)
 {
   /* Fasync */
-  if( writing_data ) file_crypto_fasync(-1, filp, 0);
+  //if( writing_data ) file_crypto_fasync(-1, filp, 0);
 
 	/* Success */
 	return 0;
@@ -212,13 +220,19 @@ static ssize_t file_crypto_read(struct file *filp, char *buf,
   //printk("read fpos = %d, count = %d\ntext_size = %d\n", *f_pos, count, text_size);
   /* Transfering data to user space */
 	//if (copy_to_user(buf, text + *f_pos, count)) return -EFAULT;
-	if (copy_to_user(buf, text, count)) return -EFAULT;
+  if (text == NULL)
+    return -EFAULT;
 
-  //printk("Encrypted data passed to user:\n");
-  //hexdump(text + *f_pos, count);
+  if (copy_to_user(buf, text, count)) return -EFAULT;
 
-  if(local_buf) kfree(local_buf);
-  if(text) kfree(text);
+  if(local_buf) {
+    kfree(local_buf);
+    local_buf = NULL;
+  }
+  if(text) {
+    kfree(text);
+    text = NULL;
+  }
 
   text_size = 0;
 
@@ -239,18 +253,20 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
   writing_data = 1; // for fasync
 
 	local_buf = kmalloc(count, GFP_KERNEL);
-
 	if (!local_buf)
 	{
 		printk(KERN_ALERT "Insufficient kernel memory for local_buf\n");
 		return -ENOMEM;
 	}
+  printk("Local Buf Allocated\n");
 
   if (copy_from_user( local_buf, buf, count ))
   {
     printk("crypto module: copy from user error\n");
     return -EFAULT;
   }
+
+  printk("Local Buf Filled with user data\n");
 
   content_size = 0;
   content_size |= ((int)local_buf[0]) << 24;
@@ -267,7 +283,7 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
 
   key = &local_buf[ 4+content_size ];
 
-  printk(KERN_ALERT"ED flag: %02x\n",local_buf[count-1]);
+  //printk(KERN_ALERT"ED flag: %02x\n",local_buf[count-1]);
   if ( local_buf[count-1] ) { // encrypt
 
     text = kmalloc(content_size+iv_len, GFP_KERNEL);
@@ -304,11 +320,15 @@ static ssize_t file_crypto_write(struct file *filp, const char *buf,
     */
   }
 
+  if(local_buf) {
+    kfree(local_buf);
+    local_buf = NULL;
+  }
   text_size = bytes_encrypted;
   printk(KERN_ALERT "Text Size: %d\n", text_size);
 
   /* Send async signal */
-	if (async_queue) kill_fasync(&async_queue, SIGIO, POLL_IN);
+	//if (async_queue) kill_fasync(&async_queue, SIGIO, POLL_IN);
 
 	return count;
 }
@@ -418,6 +438,11 @@ int encrypt_data(const char *buf, char *cipher_text)
   /* Free Transform */
   crypto_free_blkcipher(tfm);
 
+  if(iv) {
+    kfree(iv);
+    iv = NULL;
+  }
+
 	return content_size + 16;
 }
 
@@ -427,7 +452,7 @@ int encrypt_data(const char *buf, char *cipher_text)
 int decrypt_data(const char *buf, char *plain_text)
 {
   int content_size;
-  char *iv;
+  char *iv = NULL;
   char *content;
   char *key;
 
@@ -463,6 +488,8 @@ int decrypt_data(const char *buf, char *plain_text)
 	desc.flags = 0;
 
 	crypto_blkcipher_clear_flags(tfm, ~0);
+
+  printk(KERN_ALERT"Set blk cipher\n");
 
 	ret = crypto_blkcipher_setkey(tfm, key, klen);
 	if (ret) {

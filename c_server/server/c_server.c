@@ -25,10 +25,8 @@ void sighandler(int i){}
 
 void hexdump(unsigned char *buf, unsigned int len)
 {
-    while (len--)
-          printf("%02x", *buf++);
-
-      printf("\n");
+    while (len--) printf("%02x", *buf++);
+    printf("\n");
 }
 
 //struct sigaction action, oa;
@@ -69,11 +67,11 @@ int main(int argc, char *argv[])
         if (newsockfd < 0)
             error("ERROR on accept");
 
-        char *request = malloc(1 + 4 + 255);
+        char *request = malloc(1 + 4 + 256);
         if (request == NULL)
             error("ERROR not enough memory");
 
-        if (read(newsockfd, request, 1 + 4 + 255) < 0) 
+        if (read(newsockfd, request, 1 + 4 + 256) < 0) 
             error("ERROR reading from socket");
 
         if (*request == 'C')
@@ -81,22 +79,22 @@ int main(int argc, char *argv[])
             //  Find out file_size and byte_padd
             // int file_size = atoi(request+1);
             int msg_size= 0;
-            msg_size |= (request[1] & 0xff000000) >> 24;
-            msg_size |= (request[2] & 0x00ff0000) >> 16;
-            msg_size |= (request[3] & 0x0000ff00) >> 8;
-            msg_size |= (request[4] & 0x000000ff);
+            msg_size |= ( (int)request[1]) << 24;
+            msg_size |= ( (int)request[2]) << 16;
+            msg_size |= ( (int)request[3]) << 8;
+            msg_size |= ( (int)request[4]);
 
-            char *file_name = malloc(255);
+            char *file_name = malloc(256);
             strcpy(file_name, &request[5]);
 
-            printf("Char: %c File Name: %s\n", request[0],file_name);
+            printf("Char: %c, MSG Size: %d\nFile Name: %s\n", request[0],msg_size,file_name);
 
             //int byte_padd = 16 - (file_size & 0xf);
 
             //  Allocate enough memory for encryption driver buffer
             free(request);
-            //request = malloc(sizeof(int)+file_size+byte_padd+16+1+256);
             request = malloc(msg_size);
+
             if (request == NULL){
                 if (write(newsockfd,"ENOMEM",7) < 0)
                     error("ERROR writing to socket");
@@ -112,18 +110,17 @@ int main(int argc, char *argv[])
             ///// Second socket receive
 
             //  Receive file
-            //if (read(newsockfd,request+4,file_size+byte_padd+16+1) < 0)
-            if (read(newsockfd,request,msg_size) < 0)
+            if (read(newsockfd, request, msg_size) < 0)
                 error("ERROR reading from socket");
- 
-            hexdump(request, msg_size);
-            
+
+            //hexdump(request, msg_size);
+
             //  Open encryption drive
             int eFile = open("/dev/file_crypto", O_RDWR);
             if (eFile < 0)
                 error("ERROR encrypt module isn't loaded");
-            fcntl(eFile, F_SETOWN, getpid());
-            fcntl(eFile, F_SETFL, fcntl(eFile, F_GETFL) | O_ASYNC);
+            //fcntl(eFile, F_SETOWN, getpid());
+            //fcntl(eFile, F_SETFL, fcntl(eFile, F_GETFL) | O_ASYNC);
 
             //  Pass file to encryptor
             //*((int*) request) = file_size+byte_padd;
@@ -131,27 +128,28 @@ int main(int argc, char *argv[])
                 error("ERROR could not write to encryptor");
             printf("Write Done\n");
 
-
-            /*
-            j=0;
-            for (i=0; i<1000000; i++)
-              j = j+i;
-            */
-
+            // Close and Re open device file
+            close(eFile);
+            eFile = open("/dev/file_crypto", O_RDWR);
+            if (eFile < 0)
+                error("ERROR encrypt module isn't loaded");
 
             // Subtract non contentn fields, add space for IV
             printf("Reading from crypto\n");
             if (read(eFile, request, msg_size - 4 - 16 - 1 + 16) < 0)
                 error("ERROR Could not read from encryptor");
+            close(eFile);
 
             //  Open file with filename
             FILE *file = fopen(file_name, "w");
             if (file < 0)
                 error("ERROR could not open file to write");
 
-            //  Store to file
+            // Store to file
+            // printf("Writing %s at %d Bytes\n", filename, msg_size-4-16-1+16)
             if (fwrite(request, msg_size-4-16-1+16, 1, file) < 1 )
                 error("ERROR could not store encrypted file");
+            fclose(file);
         }
         else if (*request == 'R')
         {
@@ -159,6 +157,9 @@ int main(int argc, char *argv[])
             char key[16], filename[256];
             memcpy(key, request+1, 16);
             memcpy(filename, request+1+16, 256);
+
+            printf("Request: %s\n", request);
+            //hexdump(request, 1 + 16 + 256 );
 
             //  Open file
             FILE *file = fopen(filename, "rb");
@@ -170,6 +171,8 @@ int main(int argc, char *argv[])
             if (stat(filename, &filestat))
                 error("ERROR could not find out size of file");
             int file_size = filestat.st_size;
+
+            printf("File Size: %d\n", file_size);
 
             //  Allocate enough memory for decryption driver buffer
             free(request);
@@ -186,15 +189,16 @@ int main(int argc, char *argv[])
             // Set file size
             request[0] = ( file_size & 0xff000000) >> 24;
             request[1] = ( file_size & 0x00ff0000) >> 16;
-            request[2] = ( file_size & 0xff00ff00) >> 8;
-            request[3] = ( file_size & 0xff0000ff);
+            request[2] = ( file_size & 0x0000ff00) >> 8;
+            request[3] = ( file_size & 0x000000ff);
 
             // Fill file content
             if (fread(&request[4], file_size, 1, file) < 1)
                 error("ERROR could not read encrypted file");
+            fclose(file);
 
             // set key
-            memcpy(request+file_size, key, 16);
+            memcpy(&request[4+file_size], key, 16);
 
             // set decrypt flag
             request[4+file_size+16] = 0x00;
@@ -209,30 +213,37 @@ int main(int argc, char *argv[])
                 error("ERROR could not write to decryptor");
             free(request);
 
+            // Subtract IV len from file size
+            file_size -= 16;
             // Send file size
-            requets = malloc(4);
+            request = malloc(4);
             request[0] = ( file_size & 0xff000000) >> 24;
             request[1] = ( file_size & 0x00ff0000) >> 16;
-            request[2] = ( file_size & 0xff00ff00) >> 8;
-            request[3] = ( file_size & 0xff0000ff);
+            request[2] = ( file_size & 0x0f00ff00) >> 8;
+            request[3] = ( file_size & 0x000000ff);
             n = write(newsockfd, request, 4);
             if( n != 4)
-            {
               error("ERROR writing to socket");
-              close(newsockfd);
-              free(request);
-              continue;
-            }
+
+            // Close and re open the device file
+            close(eFile);
+            eFile = open("/dev/file_crypto", O_RDWR);
+            if (eFile < 0)
+                error("ERROR encrypt module isn't loaded");
 
             //  Read decrypted data
             free(request);
             request = malloc(file_size);
             if (read(eFile, request, file_size) < 0)
                 error("ERROR Could not read from decryptor");
+            printf("Done Reading decrypted data\n");
+            close(eFile);
+
 
             //  Send file content
             if (write(newsockfd, request, file_size) < 0)
                 error("ERROR writing to socket");
+            printf("Read Complete\n");
         }
 
         else if (*request == 'D')
@@ -252,8 +263,9 @@ int main(int argc, char *argv[])
             }
         }
 
+        free(request);
         close(newsockfd);
     }
 
-    return 0; 
+    return 0;
 }

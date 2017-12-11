@@ -13,12 +13,6 @@ default:
 gumstix:
 	$(MAKE) -C $(KERNELDIR_GUM) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS) modules
 
-encrypt2sd: encrypt2sd.o
-	arm-linux-gcc -o encrypt2sd encrypt2sd.o
-
-encrypt2sd.o: encrypt2sd.c
-	arm-linux-gcc -c encrypt2sd.c -o encrypt2sd.o
-
 fct: fct.o
 	arm-linux-gcc -o fct fct.o
 
@@ -28,6 +22,5 @@ fct.o: fct.c
 
 clean:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) ARCH=$(ARCH) clean
-	#rm encrypt2sd
 
 endif
