@@ -17,6 +17,8 @@
 
 
 #define MAX_TRIES 100000
+#define PATH_PREFIX "storage/"
+#define PREFIX_LEN 8
 
 void error(char *msg)
 {
@@ -65,7 +67,7 @@ int main(int argc, char *argv[])
     //  Run socket server
     struct sockaddr_in cli_addr;
     int clilen = sizeof(cli_addr);
-    while (1)
+   while (1)
     {
         int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0)
@@ -88,10 +90,11 @@ int main(int argc, char *argv[])
             msg_size |= ( (int)request[3]) << 8;
             msg_size |= ( (int)request[4]);
 
-            char *file_name = malloc(256);
-            strcpy(file_name, &request[5]);
+            char *filename = malloc(PREFIX_LEN+256);
+            memcpy(filename, PATH_PREFIX, PREFIX_LEN);
+            strcpy(&filename[PREFIX_LEN], &request[5]);
 
-            printf("Char: %c, MSG Size: %d\nFile Name: %s\n", request[0],msg_size,file_name);
+            printf("Char: %c, MSG Size: %d\nFile Name: %s\n", request[0],msg_size,filename);
 
             //  Allocate enough memory for encryption driver buffer
             free(request);
@@ -151,7 +154,7 @@ int main(int argc, char *argv[])
             close(eFile);
 
             //  Open file with filename
-            FILE *file = fopen(file_name, "w");
+            FILE *file = fopen(filename, "w");
             if (file < 0)
                 error("ERROR could not open file to write");
 
@@ -164,9 +167,10 @@ int main(int argc, char *argv[])
         else if (*request == 'R')
         {
             //  Read key and filename
-            char key[16], filename[256];
+            char key[16], filename[PREFIX_LEN+256];
             memcpy(key, request+1, 16);
-            memcpy(filename, request+1+16, 256);
+            memcpy(filename, PATH_PREFIX, PREFIX_LEN);
+            memcpy(&filename[PREFIX_LEN], request+1+16, 256);
 
             printf("Request: %s\n", request);
             //hexdump(request, 1 + 16 + 256 );
@@ -279,8 +283,9 @@ int main(int argc, char *argv[])
         else if (*request == 'D')
         {
             //  Read filename
-            char filename[256];
-            memcpy(filename, request+1, 256);
+            char filename[PREFIX_LEN+256];
+            memcpy(filename, PATH_PREFIX, PREFIX_LEN);
+            memcpy(&filename[PREFIX_LEN], request+1, 256);
 
             //  Delete file
             if (remove(filename) < 0)
