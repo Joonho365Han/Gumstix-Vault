@@ -1,0 +1,16 @@
+This directory has files needed to upload and download files to the Gumstix.
+
+Directions:
+
+1. Download: gui.py and client
+
+  Note: client is a Mac OSX executable. Download the c_client.c and the Makefile
+        if you are using a different platform.
+
+2. Run gui.py in the directory with files that you want to upload or download
+3. Enter the path of the file you want, realative to the directory you are
+   running gui.py from.
+4. Enter the password for the file.
+5. Click the read or write button.
+
+
