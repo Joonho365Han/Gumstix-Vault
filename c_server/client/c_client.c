@@ -13,6 +13,7 @@
 #define SERV_ADDR "10.0.0.100"
 #define PORTNO 81
 #define MAX_FILE_SIZE = 100*1024
+#define MAX_TRIES 100000
 
 
 void error(char *msg)
@@ -30,6 +31,7 @@ int main(int argc, char *argv[])
   int sockfd, newsockfd, portno, clilen;
   char *buffer;
   int n;
+  int tries;
   int pad_len;
 
   char *file_buffer;
@@ -135,9 +137,21 @@ int main(int argc, char *argv[])
     // set write
     buffer[ 4 + fsize + 16] = 1;
 
-    n = write(sockfd, buffer, 4 + fsize + 16 + 1);
-    if (n == 4 + fsize + 16 + 1 ) printf("Data Written\n");
-    else printf("There was a problem writing the data");
+    n = 0;
+    tries = 0;
+    while( n < 4 + fsize + 16 + 1)
+    {
+      n += write(sockfd, &buffer[n], 4 + fsize + 16 + 1 - n );
+      tries++;
+      if( tries > MAX_TRIES)
+      {
+        printf("Error: There was a problem writing the data\n");
+        printf("Exiting immediatly\n");
+        return 0;
+      }
+    }
+
+    printf("Data Written\n");
 
   }
   else { // read file
@@ -177,10 +191,18 @@ int main(int argc, char *argv[])
 
     // Get file
     buffer = malloc(file_size);
-    n = read(sockfd, buffer, file_size);
-    if( n != file_size) {
-      printf("Error Read: There was a problem reading the file data\n");
-      printf("Read data size: %d\n", n);
+    n = 0;
+    tries = 0;
+    while( n < file_size )
+    {
+      n += read(sockfd, &buffer[n], file_size-n);
+      tries++;
+      if( tries > MAX_TRIES ) {
+        printf("Error Read: There was a problem reading the file data\n");
+        printf("Read data size: %d\n", n);
+        printf("Exiting Immediatly\n");
+        return 0;
+      }
     }
 
     FILE *f = fopen(argv[2], "wb");
