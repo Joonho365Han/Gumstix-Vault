@@ -15,6 +15,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+
+#define MAX_TRIES 100000
+
 void error(char *msg)
 {
     perror(msg);
@@ -35,6 +38,7 @@ void hexdump(unsigned char *buf, unsigned int len)
 int main(int argc, char *argv[])
 {
     int n;
+    int tries;
 
     if (argc < 2) {
         fprintf(stderr,"ERROR, no port provided\n");
@@ -89,8 +93,6 @@ int main(int argc, char *argv[])
 
             printf("Char: %c, MSG Size: %d\nFile Name: %s\n", request[0],msg_size,file_name);
 
-            //int byte_padd = 16 - (file_size & 0xf);
-
             //  Allocate enough memory for encryption driver buffer
             free(request);
             request = malloc(msg_size);
@@ -104,14 +106,25 @@ int main(int argc, char *argv[])
             }
 
             //  Notify client it's ready to receive file
-            if (write(newsockfd,"Ready",6) < 0)
+            if (write(newsockfd,"Ready",6) != 6)
                 error("ERROR writing to socket");
 
             ///// Second socket receive
 
             //  Receive file
-            if (read(newsockfd, request, msg_size) < 0)
+            n = 0;
+            tries = 0;
+            while( n < msg_size )
+            {
+              n += read(newsockfd, &request[n], msg_size-n);
+              tries++;
+              if ( tries > MAX_TRIES)
+              {
+                printf("Problem reading file\n");
+                printf("Read %d, not %d\n", n, msg_size);
                 error("ERROR reading from socket");
+              }
+            }
 
             //hexdump(request, msg_size);
 
@@ -119,11 +132,8 @@ int main(int argc, char *argv[])
             int eFile = open("/dev/file_crypto", O_RDWR);
             if (eFile < 0)
                 error("ERROR encrypt module isn't loaded");
-            //fcntl(eFile, F_SETOWN, getpid());
-            //fcntl(eFile, F_SETFL, fcntl(eFile, F_GETFL) | O_ASYNC);
 
             //  Pass file to encryptor
-            //*((int*) request) = file_size+byte_padd;
             if (write(eFile, request, msg_size) < 0)
                 error("ERROR could not write to encryptor");
             printf("Write Done\n");
@@ -209,8 +219,9 @@ int main(int argc, char *argv[])
                 error("ERROR encrypt module isn't loaded");
 
             //  Pass file to decryptor
-            if (write(eFile, request, 4+file_size+16+1) < 0)
-                error("ERROR could not write to decryptor");
+            n = write(eFile, request, 4+file_size+16+1);
+            if ( n != 4+file_size+16+1 )
+              error("ERROR could not write to decryptor");
             free(request);
 
             // Subtract IV len from file size
@@ -234,15 +245,34 @@ int main(int argc, char *argv[])
             //  Read decrypted data
             free(request);
             request = malloc(file_size);
-            if (read(eFile, request, file_size) < 0)
-                error("ERROR Could not read from decryptor");
+            n = read(eFile, request, file_size);
+            if ( n != file_size)
+            {
+              printf("Read error: not right amout of data returned\n");
+              printf("Read %d, not %d\n", n, file_size);
+              error("ERROR Could not read from decryptor");
+            }
             printf("Done Reading decrypted data\n");
             close(eFile);
 
+            printf("Decrypted Data:\n");
+            hexdump(request, 16);
 
             //  Send file content
-            if (write(newsockfd, request, file_size) < 0)
+            printf("Sending %d Bytes of data\n",file_size);
+            n = 0;
+            tries = 0;
+            while(n < file_size)
+            {
+              n += write(newsockfd, &request[n], file_size-n);
+              tries++;
+              if( tries > MAX_TRIES )
+              {
+                printf("Did not write the correct ammount of data\n");
+                printf("wrote %d, not %d\n", n, file_size);
                 error("ERROR writing to socket");
+              }
+            }
             printf("Read Complete\n");
         }
 
